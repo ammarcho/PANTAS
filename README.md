@@ -12,10 +12,10 @@ Seluruh model dilatih menggunakan YOLOv11-seg dengan pendekatan `imgsz=416` dan 
 
 | Komoditas | Dataset (Gambar) | Precision | Recall | mAP50 (Mask) | Status / Epoch |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Cabai (Chili)** | ~30.000+ | **97,6%** | **95,9%** | **97,1%** | Sempurna (Epoch 37 - Early Stop) |
-| **Timun (Cucumber)** | ~1.200 | **95,9%** | **89,8%** | **96,0%** | Sangat Tajam (Epoch 100) |
-| **Tomat (Tomato)** | ~10.600 | **94,5%** | **84,5%** | **90,3%** | Sangat Baik (Epoch 100) |
-| **Wortel (Carrot)** | ~1.600 | **91,1%** | **78,1%** | **87,4%** | Sangat Bagus (Epoch 100) |
+| **Cabai (Chili)** | ~6.400 | **97,6%** | **95,9%** | **97,1%** | Sempurna (Epoch 37 - Early Stop) |
+| **Timun (Cucumber)** | ~1.250 | **95,9%** | **89,8%** | **96,0%** | Sangat Tajam (Epoch 100) |
+| **Tomat (Tomato)** | ~9.790 | **94,5%** | **84,5%** | **90,3%** | Sangat Baik (Epoch 100) |
+| **Wortel (Carrot)** | ~788 | **91,1%** | **78,1%** | **87,4%** | Sangat Bagus (Epoch 100) |
 
 *Catatan: Kecepatan inferensi (deteksi) hanya memakan waktu rata-rata **60ms - 80ms** per frame, sangat siap untuk kecepatan ban berjalan (conveyor belt) industri.*
 
