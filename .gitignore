@@ -1,0 +1,14 @@
+# Dataset Folders
+dataset-carrot/
+dataset-chili/
+dataset-cucumber/
+dataset-tomato/
+
+# YOLO Weights and Runs
+runs/
+*.pt
+!export_models/*.pt
+
+# Python Caches
+__pycache__/
+*.pyc
