@@ -8,9 +8,13 @@ if __name__ == '__main__':
         print("Example: python train_model.py chili")
         sys.exit(1)
         
+    from pathlib import Path
     commodity = sys.argv[1].lower()
-    data_yaml = f"d:/Belajar_Pemrograman/Machine_Learning/Machine_Learning_Projects/DeepLearning/YOLO/PANTAS/dataset-{commodity}/data.yaml"
     
+    script_dir = Path(__file__).parent
+    data_yaml = script_dir / "datasets" / f"dataset-{commodity}" / "data.yaml"
+    data_yaml = str(data_yaml.resolve())
+
     if not os.path.exists(data_yaml):
         print(f"Error: {data_yaml} not found. Please build the dataset first.")
         sys.exit(1)

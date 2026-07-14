@@ -1,14 +1,15 @@
 # Dataset Folders
-dataset-carrot/
-dataset-chili/
-dataset-cucumber/
-dataset-tomato/
+ai_engine/datasets/dataset-carrot/
+ai_engine/datasets/dataset-chili/
+ai_engine/datasets/dataset-cucumber/
+ai_engine/datasets/dataset-tomato/
 
 # YOLO Weights and Runs
-runs/
-*.pt
-!export_models/*.pt
+ai_engine/runs/
+ai_engine/*.pt
+!ai_engine/export_models/*.pt
 
 # Python Caches
 __pycache__/
+*/__pycache__/
 *.pyc

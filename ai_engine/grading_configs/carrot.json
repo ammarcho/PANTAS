@@ -1,0 +1,10 @@
+{
+    "min_area_A": 12000,
+    "min_area_B": 6000,
+    "min_circularity_A": 0.3,
+    "min_circularity_B": 0.15,
+    "hue_ranges": {
+        "bagus": [[10, 25]],
+        "pucat": [[25, 40]]
+    }
+}
