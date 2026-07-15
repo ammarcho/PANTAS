@@ -1,11 +1,45 @@
 {
     "min_area_A": 1800,
     "min_area_B": 1000,
-    "min_circularity_A": 0.20,
-    "min_circularity_B": 0.10,
+    "min_circularity_A": 0.2,
+    "min_circularity_B": 0.1,
     "hue_ranges": {
-        "segar_hijau": [[30, 85]],
-        "pucat_kekuningan": [[15, 30]],
-        "merah_terlalu_matang": [[0, 15], [165, 180]]
+        "segar_hijau": [
+            [
+                30,
+                85
+            ]
+        ],
+        "pucat_kekuningan": [
+            [
+                15,
+                30
+            ]
+        ],
+        "merah_terlalu_matang": [
+            [
+                0,
+                15
+            ],
+            [
+                165,
+                180
+            ]
+        ]
+    },
+    "defect_rules": {
+        "hsv_lower": [
+            0,
+            0,
+            0
+        ],
+        "hsv_upper": [
+            180,
+            255,
+            70
+        ],
+        "max_kosmetik_percent": 0.5,
+        "max_reject_percent": 5.0,
+        "min_solidity": 0.9
     }
 }

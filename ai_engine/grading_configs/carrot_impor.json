@@ -1,10 +1,35 @@
 {
     "min_area_A": 6500,
     "min_area_B": 4000,
-    "min_circularity_A": 0.70,
-    "min_circularity_B": 0.50,
+    "min_circularity_A": 0.7,
+    "min_circularity_B": 0.5,
     "hue_ranges": {
-        "bagus_oranye": [[10, 25]],
-        "pucat_kekuningan": [[25, 40]]
+        "bagus_oranye": [
+            [
+                10,
+                25
+            ]
+        ],
+        "pucat_kekuningan": [
+            [
+                25,
+                40
+            ]
+        ]
+    },
+    "defect_rules": {
+        "hsv_lower": [
+            0,
+            0,
+            0
+        ],
+        "hsv_upper": [
+            180,
+            255,
+            70
+        ],
+        "max_kosmetik_percent": 0.5,
+        "max_reject_percent": 5.0,
+        "min_solidity": 0.9
     }
 }

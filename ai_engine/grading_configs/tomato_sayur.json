@@ -1,11 +1,45 @@
 {
     "min_area_A": 1800,
     "min_area_B": 1000,
-    "min_circularity_A": 0.80,
-    "min_circularity_B": 0.60,
+    "min_circularity_A": 0.8,
+    "min_circularity_B": 0.6,
     "hue_ranges": {
-        "matang_merah": [[0, 15], [165, 180]],
-        "setengah_matang": [[15, 35]],
-        "mentah_hijau": [[35, 85]]
+        "matang_merah": [
+            [
+                0,
+                15
+            ],
+            [
+                165,
+                180
+            ]
+        ],
+        "setengah_matang": [
+            [
+                15,
+                35
+            ]
+        ],
+        "mentah_hijau": [
+            [
+                35,
+                85
+            ]
+        ]
+    },
+    "defect_rules": {
+        "hsv_lower": [
+            0,
+            0,
+            0
+        ],
+        "hsv_upper": [
+            180,
+            255,
+            70
+        ],
+        "max_kosmetik_percent": 0.5,
+        "max_reject_percent": 5.0,
+        "min_solidity": 0.9
     }
 }
