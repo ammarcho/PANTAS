@@ -84,9 +84,12 @@ class GradingEngine:
         color_status, color_score = self._check_color(mean_hue)
         result["color_status"] = color_status
 
-        # 4. Deteksi CACAT (Hitam/Busuk)
-        lower_dark = np.array([0, 0, 0])
-        upper_dark = np.array([180, 255, 70]) # Threshold untuk hitam/coklat gelap
+        # 4. Deteksi CACAT (Hitam/Busuk) - Dinamis per Komoditas
+        defect_config = self.config.get("defect_rules", {})
+        # Default threshold coklat/hitam jika tidak ada di JSON
+        lower_dark = np.array(defect_config.get("hsv_lower", [0, 0, 0]))
+        upper_dark = np.array(defect_config.get("hsv_upper", [180, 255, 70])) 
+        
         dark_mask = cv2.inRange(hsv_img, lower_dark, upper_dark)
         defect_roi = cv2.bitwise_and(dark_mask, dark_mask, mask=mask_img)
         defect_pixels = cv2.countNonZero(defect_roi)
@@ -95,13 +98,17 @@ class GradingEngine:
         cacat_list = []
         is_reject = False
         
-        if luas_persen_cacat > 5:
+        # Ambang batas dinamis (Default: >5% Reject, >0.5% Kosmetik)
+        reject_threshold = defect_config.get("max_reject_percent", 5.0)
+        kosmetik_threshold = defect_config.get("max_kosmetik_percent", 0.5)
+        
+        if luas_persen_cacat > reject_threshold:
             cacat_list.append({"jenis": "bercak_busuk", "tipe": "patologis", "luas_persen": round(luas_persen_cacat, 1)})
             is_reject = True
-        elif luas_persen_cacat > 0.5:
+        elif luas_persen_cacat > kosmetik_threshold:
             cacat_list.append({"jenis": "bercak_ringan", "tipe": "kosmetik", "luas_persen": round(luas_persen_cacat, 1)})
             
-        if solidity < 0.90:
+        if solidity < defect_config.get("min_solidity", 0.90):
             cacat_list.append({"jenis": "deformasi_bentuk", "tipe": "kosmetik", "luas_persen": 0})
             
         result["cacat"] = cacat_list
@@ -110,7 +117,7 @@ class GradingEngine:
         alasan = []
         if is_reject:
             result["grade"] = "REJECT"
-            alasan.append(f"Cacat patologis (busuk) mencapai {round(luas_persen_cacat,1)}% area -> REJECT mutlak")
+            alasan.append(f"Cacat patologis mencapai {round(luas_persen_cacat,1)}% (Ambang: {reject_threshold}%) -> REJECT mutlak")
         else:
             min_a = self.config["min_area_A"]
             min_b = self.config["min_area_B"]
