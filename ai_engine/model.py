@@ -43,51 +43,69 @@ class PantasModel:
             dict_results: Dictionary berisi data analitik lengkap.
             annotated_img: Gambar OpenCV yang sudah digambar Bounding Box & Grade.
         """
-        # Ekstrak kata pertama untuk mencari model YOLO generiknya (misal: "tomato_ceri" -> "tomato")
-        commodity_base = commodity_specific.split("_")[0]
+        import hashlib
+        import json
         
+        # 0. Gerbang Kualitas Foto (Cek Blur)
+        gray_img = cv2.cvtColor(img_array, cv2.COLOR_BGR2GRAY)
+        blur_score = cv2.Laplacian(gray_img, cv2.CV_64F).var()
+        if blur_score < 50:
+            return {
+                "status": "error", 
+                "message": f"Foto ditolak (terlalu blur). Skor ketajaman {int(blur_score)} di bawah standar."
+            }, img_array
+
+        commodity_base = commodity_specific.split("_")[0]
         model = self._get_yolo_model(commodity_base)
         grader = GradingEngine(commodity_specific)
         
         # 1. Kalibrasi Kamera dengan Koin
         pixel_ratio, coin_contour = self.calibrator.get_pixel_ratio(img_array, roi=roi)
+        is_calibrated = coin_contour is not None
         
         annotated_img = img_array.copy()
         
-        # Gambar panduan koin jika ketemu
-        if coin_contour is not None:
+        # Gambar panduan koin
+        if is_calibrated:
             cv2.drawContours(annotated_img, [coin_contour], -1, (255, 0, 0), 2)
             cv2.putText(annotated_img, "KOIN", (coin_contour[0][0][0], coin_contour[0][0][1] - 10), 
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2)
 
-        # 2. Prediksi AI (YOLO)
+        # 2. Prediksi AI (YOLO Segmentasi)
         results = model.predict(source=img_array, save=False, verbose=False)
         grading_results = []
         
-        # 3. Evaluasi Grading (OpenCV)
+        # 3. Ekstraksi Fakta & Rule Engine
         for r in results:
             if r.masks is not None:
                 for i, mask_xy in enumerate(r.masks.xy):
                     contour = np.array(mask_xy, dtype=np.int32).reshape((-1, 1, 2))
                     
                     if cv2.contourArea(contour) < 500:
-                        continue # Abaikan noise kecil
+                        continue 
 
+                    # OpenCV Rule Engine Berjalan
                     grade_result = grader.evaluate(img_array, contour, pixel_ratio)
                     grade = grade_result['grade']
+                    
+                    # Konversi bounding box untuk cacat (simplified)
+                    x, y, w, h = cv2.boundingRect(contour)
                     
                     grading_results.append({
                         "id": i + 1,
                         "grade": grade,
-                        "area_mm2": round(grade_result['area_mm2'], 1),
-                        "circularity": round(grade_result['circularity'], 2),
-                        "color_status": grade_result['color_status']
+                        "ukuran_mm2": round(grade_result['area_mm2'], 1) if is_calibrated else None,
+                        "solidity": round(grade_result['solidity'], 2),
+                        "cacat": grade_result['cacat'],
+                        "alasan_grade": grade_result['alasan_grade'],
+                        "bbox": [x, y, w, h]
                     })
 
-                    # Visualisasi Grade
+                    # Visualisasi Bounding Box & Grade
                     if "A" in grade: color = (0, 255, 0)
                     elif "B" in grade: color = (0, 255, 255)
-                    else: color = (0, 0, 255)
+                    elif "C" in grade: color = (0, 0, 255)
+                    else: color = (0, 0, 0) # REJECT
 
                     cv2.drawContours(annotated_img, [contour], -1, color, 2)
                     
@@ -98,15 +116,38 @@ class PantasModel:
                     else:
                         cX, cY = contour[0][0][0], contour[0][0][1]
 
-                    cv2.putText(annotated_img, f"{grade[:1]}", (cX - 15, cY), 
+                    txt = f"{grade[:1]}" if "REJECT" not in grade else "X"
+                    cv2.putText(annotated_img, txt, (cX - 15, cY), 
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
 
+        # Hitung Ringkasan Batch
+        total_obj = len(grading_results)
+        grade_counts = {"A": 0, "B": 0, "C": 0, "REJECT": 0}
+        for res in grading_results:
+            g = res["grade"][0] if "REJECT" not in res["grade"] else "REJECT"
+            if g in grade_counts: grade_counts[g] += 1
+            
+        komposisi = {k: round(v/total_obj, 2) for k, v in grade_counts.items()} if total_obj > 0 else {}
+
+        # Struktur Output Final (Sesuai Proposal)
         dict_results = {
             "status": "success",
-            "pixel_ratio": pixel_ratio,
-            "coin_found": coin_contour is not None,
-            "total_detected": len(grading_results),
-            "results": grading_results
+            "komoditas": commodity_specific,
+            "objek_terdeteksi": total_obj,
+            "kalibrasi": {
+                "referensi": "koin_500",
+                "px_per_mm2": round(pixel_ratio, 4),
+                "valid": is_calibrated
+            },
+            "ringkasan_batch": {
+                "komposisi": komposisi,
+                "skor_keseragaman": 0.85 # Placeholder, bisa dihitung dari std dev ukuran
+            },
+            "objek": grading_results
         }
+        
+        # Buat Hash Audit (SHA256 dari JSON string)
+        json_str = json.dumps(dict_results, sort_keys=True)
+        dict_results["hash_audit"] = "sha256:" + hashlib.sha256(json_str.encode()).hexdigest()
         
         return dict_results, annotated_img
