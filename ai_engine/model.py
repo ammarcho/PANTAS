@@ -20,14 +20,6 @@ class PantasModel:
         """
         self.yolo_models = {}
         self.calibrator = AutoCalibrator()
-        
-        # Harga dasar simulasi (Rupiah/Kg)
-        self.base_prices = {
-            "tomato": 15000,
-            "chili": 40000,
-            "carrot": 12000,
-            "cucumber": 8000
-        }
 
     def _get_yolo_model(self, commodity: str):
         """Mekanisme Caching: Load model hanya jika belum ada di memori."""
@@ -37,19 +29,6 @@ class PantasModel:
                 raise FileNotFoundError(f"Model YOLO untuk '{commodity}' tidak ditemukan di {model_path}")
             self.yolo_models[commodity] = YOLO(str(model_path))
         return self.yolo_models[commodity]
-
-    def _calculate_fair_price(self, commodity_base: str, grade: str) -> str:
-        """
-        Menghitung harga rekomendasi secara Rule-Based.
-        (Nantinya akan diganti dengan model ML Regresi).
-        """
-        base = self.base_prices.get(commodity_base, 10000)
-        if "A" in grade:
-            return f"Rp{base:,}"
-        elif "B" in grade:
-            return f"Rp{int(base * 0.7):,}" # Diskon 30%
-        else:
-            return f"Rp{int(base * 0.5):,}" # Diskon 50%
 
     def predict(self, img_array, commodity_specific: str, roi=None):
         """
@@ -96,12 +75,10 @@ class PantasModel:
 
                     grade_result = grader.evaluate(img_array, contour, pixel_ratio)
                     grade = grade_result['grade']
-                    fair_price = self._calculate_fair_price(commodity_base, grade)
                     
                     grading_results.append({
                         "id": i + 1,
                         "grade": grade,
-                        "fair_price": fair_price,
                         "area_mm2": round(grade_result['area_mm2'], 1),
                         "circularity": round(grade_result['circularity'], 2),
                         "color_status": grade_result['color_status']
