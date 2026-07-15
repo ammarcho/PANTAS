@@ -1,0 +1,11 @@
+{
+    "min_area_A": 700,
+    "min_area_B": 400,
+    "min_circularity_A": 0.15,
+    "min_circularity_B": 0.05,
+    "hue_ranges": {
+        "matang_merah": [[0, 15], [165, 180]],
+        "pucat_setengah": [[15, 30]],
+        "mentah_hijau": [[30, 85]]
+    }
+}

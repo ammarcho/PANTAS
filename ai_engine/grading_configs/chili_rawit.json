@@ -1,0 +1,10 @@
+{
+    "min_area_A": 100,
+    "min_area_B": 50,
+    "min_circularity_A": 0.30,
+    "min_circularity_B": 0.15,
+    "hue_ranges": {
+        "matang_merah_oranye": [[0, 20], [165, 180]],
+        "mentah_hijau": [[20, 85]]
+    }
+}
