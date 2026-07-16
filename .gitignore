@@ -1,8 +1,7 @@
 # Dataset Folders
-ai_engine/datasets/dataset-carrot/
-ai_engine/datasets/dataset-chili/
-ai_engine/datasets/dataset-cucumber/
-ai_engine/datasets/dataset-tomato/
+ai_engine/datasets/yolo1_segmentation/
+ai_engine/datasets/yolo2_classification/
+ai_engine/datasets/raw_zips/
 
 # YOLO Weights and Runs
 ai_engine/runs/
