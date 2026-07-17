@@ -1,0 +1,120 @@
+@import "tailwindcss";
+
+@theme {
+  /* Brand — sampled from Figma (PANTAS) */
+  --color-brand: #40916c;
+  --color-brand-dark: #1b4332;
+  --color-brand-deep: #2d6a4f;
+  --color-brand-tint: #e8f3ed;
+  --color-brand-tint-strong: #d1e7dd;
+
+  /* Neutrals */
+  --color-ink: #111827;
+  --color-muted: #6b7280;
+  --color-label: #9ca3af;
+  --color-line: #e5e7eb;
+  --color-placeholder: #d1d5db;
+  --color-canvas: #f9fafb;
+
+  /* Grade semantics — must match ai_engine grade output */
+  --color-grade-a: #2d6a4f;
+  --color-grade-b: #b45309;
+  --color-grade-c: #2563eb;
+  --color-grade-reject: #991b1b;
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, monospace;
+
+  --radius-card: 12px;
+}
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body {
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Mobile-first shell: the Figma frames are 390px wide. On desktop we center
+   the same frame rather than stretching layouts the design never specified. */
+@utility app-frame {
+  width: 100%;
+  max-width: 430px;
+  margin-inline: auto;
+  background: var(--color-canvas);
+  min-height: 100dvh;
+  position: relative;
+}
+
+@utility tap {
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    transform 0.12s ease,
+    opacity 0.12s ease,
+    background-color 0.12s ease;
+}
+
+@utility tap-press {
+  &:active {
+    transform: scale(0.975);
+  }
+}
+
+/* Respect users who ask for less motion — the scan/reveal screens animate. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@keyframes pantas-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@utility rise {
+  animation: pantas-rise 0.36s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+
+@keyframes pantas-sweep {
+  0% {
+    transform: translateY(-100%);
+  }
+  100% {
+    transform: translateY(400%);
+  }
+}
+
+@keyframes pantas-grow {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+/* Leaflet: keep the map under our sticky chrome */
+.leaflet-container {
+  z-index: 0;
+  background: #e8ece7;
+  font: inherit;
+}
+
+.leaflet-control-attribution {
+  font-size: 9px;
+}
