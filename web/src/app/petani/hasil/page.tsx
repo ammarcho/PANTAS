@@ -6,18 +6,39 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowRight, ShieldCheck } from "lucide-react";
 import { BackBar } from "@/components/chrome";
 import { ButtonLink, Card, SectionLabel } from "@/components/ui";
-import { gradeBatch } from "@/lib/data";
+import { gradeBatch, skorKualitas } from "@/lib/data";
 import { GRADE_COLOR, num, persen } from "@/lib/format";
 import { useStore } from "@/lib/store";
 import type { Grade, GradingResult } from "@/lib/types";
 
 const ORDER: Grade[] = ["A", "B", "C", "REJECT"];
+const KOMODITAS = "tomato_sayur"; // layar pindai belum punya pemilih komoditas
 
 /**
  * Annotated-preview stand-in. With a live capture we overlay grade chips on
  * the actual photo; once /predict returns `annotated_img`, that replaces this.
  */
-function BatchPreview({ capture }: { capture: string | null }) {
+function BatchPreview({
+  capture,
+  annotated,
+}: {
+  capture: string | null;
+  annotated?: string;
+}) {
+  // annotated_img dari FastAPI /predict sudah berisi bounding box + grade
+  // hasil engine — tampilkan apa adanya, tanpa overlay tiruan.
+  if (annotated) {
+    return (
+      <div className="relative aspect-2/1 w-full overflow-hidden rounded-card bg-[#1f2a24]">
+        <img
+          src={annotated}
+          alt="Foto batch beranotasi grade dari AI"
+          className="absolute inset-0 size-full object-cover"
+        />
+      </div>
+    );
+  }
+
   const blobs: { grade: Grade; x: number; y: number; r: number }[] = [
     { grade: "A", x: 17, y: 30, r: 9.5 },
     { grade: "B", x: 44, y: 30, r: 11 },
@@ -84,12 +105,17 @@ export default function HasilPage() {
 
   useEffect(() => {
     let cancelled = false;
-    gradeBatch().then((r) => {
-      if (!cancelled) setHasil(r);
-    });
+    // Kirim capture asli ke FastAPI /predict bila NEXT_PUBLIC_PREDICT_URL
+    // terisi; tanpa itu gradeBatch mengembalikan payload demo.
+    gradeBatch({ imageDataUrl: store.lastCapture, commodity: KOMODITAS }).then(
+      (r) => {
+        if (!cancelled) setHasil(r);
+      },
+    );
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- sekali per kunjungan; capture sudah final saat layar ini terbuka
   }, []);
 
   // Record this scan once the result lands (once — StrictMode double-runs effects).
@@ -105,6 +131,7 @@ export default function HasilPage() {
       grade_dominan: dominan,
       objek: hasil.objek_terdeteksi,
       gambar: store.lastCapture ?? "/img/tomat-rumahkaca.jpg",
+      hasil, // dipersistenkan ke tabel gradings (hash_audit ikut tersimpan)
     });
   }, [hasil, store]);
 
@@ -159,7 +186,7 @@ export default function HasilPage() {
         </p>
 
         <div className="rise pt-4">
-          <BatchPreview capture={store.lastCapture} />
+          <BatchPreview capture={store.lastCapture} annotated={hasil.annotated_img} />
         </div>
 
         {/* Komposisi batch */}
@@ -234,7 +261,10 @@ export default function HasilPage() {
       </main>
 
       <footer className="sticky bottom-0 border-t border-line bg-white p-4">
-        <ButtonLink href="/petani/harga" variant="primary">
+        <ButtonLink
+          href={`/petani/harga?komoditas=${encodeURIComponent(hasil.komoditas)}&grade=${dominan}&skor=${skorKualitas(komposisi)}`}
+          variant="primary"
+        >
           Lihat Rekomendasi Harga
           <ArrowRight className="size-5" />
         </ButtonLink>

@@ -2,10 +2,25 @@ import { BackBar } from "@/components/chrome";
 import { Card } from "@/components/ui";
 import { getRekomendasiHarga } from "@/lib/data";
 import { formatRupiah, num } from "@/lib/format";
+import type { Grade } from "@/lib/types";
 import HargaForm from "./harga-form";
 
-export default async function HargaPage() {
-  const rec = await getRekomendasiHarga();
+export default async function HargaPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ komoditas?: string; grade?: string; skor?: string }>;
+}) {
+  // Layar hasil meneruskan konteks batch lewat query string; tanpa itu
+  // (buka langsung) rekomendasi memakai batch demo.
+  const p = await searchParams;
+  const skor = Number(p.skor);
+  const rec = await getRekomendasiHarga({
+    komoditas: p.komoditas,
+    grade: ["A", "B", "C", "REJECT"].includes(p.grade ?? "")
+      ? (p.grade as Grade)
+      : undefined,
+    skor: Number.isFinite(skor) ? skor : undefined,
+  });
 
   const baris = [
     { k: `Harga acuan pasar (${rec.harga_acuan_sumber})`, v: formatRupiah(rec.harga_acuan) },

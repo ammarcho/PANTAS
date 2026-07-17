@@ -1,90 +1,82 @@
-# Rencana Backend PANTAS
+# Backend PANTAS — status
 
-Frontend sudah jalan penuh sebagai aplikasi offline-first. Ada dua seam ke
-backend:
+Frontend tetap offline-first: tanpa env, semua fungsi jatuh ke data demo dan
+localStorage. Dengan `web/.env.local` terisi, seam yang sama membaca/menulis
+Supabase. Dua seam itu tidak berubah:
 
 1. [`web/src/lib/data.ts`](../web/src/lib/data.ts) — data baca (katalog,
-   grading, rekomendasi harga). Fungsi `async`, bentuk balikan sama dengan
-   backend nanti.
-2. [`web/src/lib/store.tsx`](../web/src/lib/store.tsx) — state tulis (sesi,
-   pesanan, listing terbit, riwayat pindai, inquiry), sekarang di
-   localStorage. Setiap action (`selesaiLogin`, `publishListing`,
-   `createOrder`, `verifikasiSerahTerima`, …) nanti jadi panggilan
-   Supabase/API; komponen yang memakai `useStore()` tidak berubah.
+   grading, rekomendasi harga). Sekarang query Supabase dengan fallback demo.
+2. [`web/src/lib/store.tsx`](../web/src/lib/store.tsx) — state tulis. Aksi
+   tetap sinkron untuk komponen; tulisan DB berjalan di latar belakang
+   (optimistic local + background sync), hidrasi dari DB setelah login OTP
+   asli.
 
-Migrasi = ganti isi fungsi/action, bukan ubah layar.
+Kontrak tipe tetap di [`web/src/lib/types.ts`](../web/src/lib/types.ts)
+(nama field Indonesia = wire format `PantasModel.predict`).
 
-Kontrak tipe ada di [`web/src/lib/types.ts`](../web/src/lib/types.ts) dan sengaja
-memakai nama field Indonesia karena itu format yang **sudah** dikeluarkan
-`PantasModel.predict` di `ai_engine/model.py`.
+## Fase 1 — Supabase: Auth + Database ✅
 
-## Kenapa frontend dulu
+Proyek: `saipqorcjeizxizjpfsp` (ap-southeast-1). Skema, RLS, trigger, seed:
+lihat [`supabase/`](../supabase/README.md).
 
-AI engine sudah matang (4 model YOLOv11-seg, mAP50 87–97%). Yang belum ada
-adalah cara orang memakainya. Membangun UI lebih dulu dengan kontrak yang
-mengunci ke output engine berarti: saat backend datang, tidak ada penyesuaian
-bentuk data — dan demo untuk juri tetap bisa jalan hari ini tanpa server.
+- **Auth**: `signInWithOtp`/`verifyOtp` nomor HP terpasang di `store.tsx`.
+  Tanpa provider SMS terkonfigurasi (dashboard → Auth → Phone), aplikasi
+  otomatis mode demo — layar OTP menampilkan status mana yang aktif.
+- **Tabel**: `profiles`, `listings`, `orders`, `gradings`, `harga_acuan`,
+  view `listings_view` (listing + profil petani).
+- **RLS**: aktif semua tabel; petani hanya menulis listing miliknya, pesanan
+  hanya terlihat dua pihak transaksi, verifikasi serah terima via RPC
+  `security definer`.
 
-## Fase 1 — Supabase: Auth + Database
+## Fase 2 — FastAPI: bungkus PantasModel ✅ (kode) / ⏳ (deploy)
 
-Paling dulu karena semua fase lain butuh identitas pengguna.
+- [`ai_engine/api.py`](../ai_engine/api.py): `POST /predict` (multipart
+  `image` + `commodity` + `roi` opsional) → `dict_results` dari `model.py`
+  plus `annotated_img` (JPEG data URL). `GET /health` untuk probe.
+- [`ai_engine/Dockerfile`](../ai_engine/Dockerfile) siap Hugging Face Spaces
+  (port 7860). Deploy = buat Space Docker, salin isi `ai_engine/`.
+- Frontend: isi `NEXT_PUBLIC_PREDICT_URL` di `web/.env.local`; `gradeBatch()`
+  mengirim capture kamera asli dan layar hasil menampilkan `annotated_img`.
+  Cabang `status:"error"` (foto blur) sudah ditangani layar hasil.
 
-- **Auth**: OTP nomor HP (`signInWithOtp` + `verifyOtp`). Alur login → layar
-  OTP (`web/src/app/otp/page.tsx`) sudah lengkap dalam mode demo (semua kode
-  diterima); tinggal ganti `mulaiLogin`/`selesaiLogin` di `store.tsx`.
-  Penjaga rute per peran ada di `web/src/components/require-role.tsx` —
-  sisi klien saja, perlindungan asli tetap RLS.
-- **Tabel**: `profiles` (id, peran, nama, lokasi, lat, lng, rating),
-  `listings` (kolom mengikuti `Listing` di `types.ts`),
-  `orders` (mengikuti `Pesanan`), `gradings` (simpan JSON hasil + `hash_audit`).
-- **RLS wajib**: petani hanya boleh menulis listing miliknya; pembeli hanya baca.
-  Tanpa RLS, `anon key` di browser = siapa pun bisa mengubah harga orang lain.
-- Ganti `getListings`/`getListing` di `data.ts` dan action pesanan/listing di
-  `store.tsx` dengan query Supabase. Sisanya tidak berubah.
+## Fase 3 — Supabase Storage ✅
 
-## Fase 2 — FastAPI: bungkus PantasModel
+- Bucket `panen` (publik, unggah ke folder `{uid}/`). `uploadCapture()` di
+  [`web/src/lib/supabase.ts`](../web/src/lib/supabase.ts) mengunggah frame;
+  URL publiknya dipakai listing & riwayat pindai, fallback data URL lokal.
 
-- Satu endpoint: `POST /predict` — terima `image` (multipart) + `commodity` +
-  `roi` opsional, kembalikan persis `dict_results` dari `model.py`.
-- Muat model sekali saat startup (`PantasModel` sudah punya cache per komoditas).
-- Deploy ke Hugging Face Spaces (Docker). CPU cukup: inferensi 60–80 ms/frame.
-- Ganti `gradeBatch()` dengan `fetch` ke endpoint ini.
-- **Tangani `status: "error"`** — engine menolak foto blur (`blur_score < 50`).
-  Layar hasil sudah punya cabang untuk ini.
+## Fase 4 — Harga acuan ✅ (tabel) / ⏳ (cron PIHPS)
 
-## Fase 3 — Supabase Storage
-
-- Kamera asli **sudah jalan**: layar pindai memakai `getUserMedia`
-  (`facingMode: "environment"`) dengan fallback mode demo bila kamera tidak
-  tersedia/diizinkan, plus unggah dari galeri. Frame di-downscale ke ≤900px
-  JPEG sebelum disimpan.
-- Yang tersisa: unggah frame ke bucket `panen/` alih-alih menyimpan data URL
-  di localStorage, lalu kirim URL-nya ke `/predict`.
-- Simpan `annotated_img` yang dikembalikan engine, lalu tampilkan di layar hasil
-  menggantikan overlay `BatchPreview` di `petani/hasil/page.tsx`.
-
-## Fase 4 — Harga acuan
-
-`getRekomendasiHarga` masih memakai angka tetap. Rumusnya sudah transparan di
-layar: `harga_acuan × pengali`, dengan `pengali` dari skor kualitas batch.
-Yang perlu: sumber `harga_acuan` (PIHPS) via cron harian ke tabel `harga_acuan`.
-Lihat `docs/PANTAS_Konsultasi_Algoritma_Harga.pdf`.
+- Tabel `harga_acuan` terisi 12 komoditas. `getRekomendasiHarga` membaca DB
+  dan menghitung: `pengali = bobot_grade × (0,9 + 0,16 × skor)`, rentang
+  wajar 93%–108% dari `harga_acuan × pengali`. Layar hasil meneruskan
+  komoditas/grade/skor lewat query string ke layar harga.
+- Tersisa: cron harian PIHPS menulis ke `harga_acuan` (service role).
+  Lihat `docs/PANTAS_Konsultasi_Algoritma_Harga.pdf`.
 
 ## Yang sengaja belum dikerjakan
 
-- **Payment gateway** — v1 memakai tunai/transfer saat serah terima. Kode QR di
-  layar pesanan sudah asli dan bisa dipindai untuk verifikasi serah terima.
-- **Chat** — semua tombol "Hubungi …" kini deep-link WhatsApp dengan pesan
-  terisi; tidak membangun perpesanan sendiri.
-- **Angka dampak** — dasbor dampak sudah mencampur agregat tiruan dengan
-  pesanan selesai dari store; versi backend menurunkannya penuh dari `orders`.
+- **Payment gateway** — v1 tunai/transfer saat serah terima; QR kode pesanan
+  asli dan diverifikasi lewat RPC.
+- **Chat** — tombol "Hubungi …" tetap deep-link WhatsApp.
+- **Angka dampak** — dasbor dampak masih campuran agregat tiruan + pesanan
+  store; versi penuh diturunkan dari `orders`.
+- **Pemisahan `orders.kode` dari select petani** — v1 menerima trade-off ini
+  agar mode demo offline tetap identik; catatan di `supabase/README.md`.
 
 ## Menjalankan
 
 ```bash
 cd web
 npm install
-npm run dev     # http://localhost:3000
+cp .env.example .env.local   # isi URL + anon key Supabase (opsional)
+npm run dev                  # http://localhost:3000
+
+# API grading (opsional, butuh bobot model di ai_engine/export_models/)
+cd ../ai_engine
+pip install -r requirements.txt
+uvicorn api:app --port 7860
 ```
 
-Peta memakai ubin OpenStreetMap publik — tidak perlu kunci API.
+Tanpa env sama sekali, aplikasi berjalan penuh dalam mode demo — persis
+perilaku sebelum backend ada.

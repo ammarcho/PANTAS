@@ -1,15 +1,235 @@
-import type { GradingResult, Listing, RekomendasiHarga } from "./types";
+import { supabase } from "./supabase";
+import type {
+  Grade,
+  GradingResult,
+  Listing,
+  RekomendasiHarga,
+} from "./types";
+import type { Database } from "./database.types";
 
 /**
  * Single seam between the UI and the backend.
  *
- * Every function here is async and returns the same shape the real backend
- * will return, so wiring up Supabase (listings, auth, storage) and the FastAPI
- * grading endpoint means replacing these bodies — not touching the screens.
- * See docs/BACKEND.md for the migration order.
+ * Every function tries Supabase / the FastAPI grading service first and falls
+ * back to the demo data below when the backend is not configured or a call
+ * fails — the app stays fully usable offline (docs/BACKEND.md).
  */
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/* ----------------------------------------------------------------------- */
+/* Listings                                                                  */
+/* ----------------------------------------------------------------------- */
+
+type ListingRow = Database["public"]["Views"]["listings_view"]["Row"];
+
+/** Distance reference for jarak_km until real geolocation lands: Bandung. */
+const PUSAT = { lat: -6.9147, lng: 107.6098 };
+
+function haversineKm(lat: number, lng: number): number {
+  const R = 6371;
+  const dLat = ((lat - PUSAT.lat) * Math.PI) / 180;
+  const dLng = ((lng - PUSAT.lng) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((PUSAT.lat * Math.PI) / 180) *
+      Math.cos((lat * Math.PI) / 180) *
+      Math.sin(dLng / 2) ** 2;
+  return Math.round(R * 2 * Math.asin(Math.sqrt(a)) * 10) / 10;
+}
+
+export function rowToListing(r: ListingRow): Listing {
+  return {
+    id: r.id ?? "",
+    nama: r.nama ?? "",
+    komoditas: r.komoditas ?? "",
+    grade: (r.grade ?? "B") as Grade,
+    berat_kg: Number(r.berat_kg ?? 0),
+    harga_per_kg: r.harga_per_kg ?? 0,
+    gambar: r.gambar ?? "/img/tomat.jpg",
+    petani: r.petani ?? "Petani PANTAS",
+    petani_id: r.petani_id ?? undefined,
+    lokasi: r.lokasi ?? "—",
+    jarak_km: r.lat != null && r.lng != null ? haversineKm(r.lat, r.lng) : 0,
+    rating: Number(r.rating ?? 5),
+    transaksi: r.transaksi ?? 0,
+    lat: r.lat ?? PUSAT.lat,
+    lng: r.lng ?? PUSAT.lng,
+    satuan: r.satuan ?? undefined,
+    stok_kg: r.stok_kg != null ? Number(r.stok_kg) : undefined,
+    panen_terakhir: r.panen_terakhir ?? undefined,
+    komposisi: (r.komposisi as Listing["komposisi"]) ?? undefined,
+    catatan_ai: r.catatan_ai ?? undefined,
+    alamat: r.alamat ?? undefined,
+  };
+}
+
+export async function getListings(): Promise<Listing[]> {
+  if (supabase) {
+    const { data, error } = await supabase
+      .from("listings_view")
+      .select("*")
+      .eq("status", "tayang")
+      .order("id");
+    if (!error && data && data.length > 0) return data.map(rowToListing);
+    if (error) console.warn("[pantas] getListings fallback demo:", error.message);
+  }
+  await delay(200);
+  return LISTINGS;
+}
+
+export async function getListing(id: string): Promise<Listing | undefined> {
+  if (supabase) {
+    const { data, error } = await supabase
+      .from("listings_view")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
+    if (!error && data) return rowToListing(data);
+    if (error) console.warn("[pantas] getListing fallback demo:", error.message);
+  }
+  await delay(150);
+  return LISTINGS.find((l) => l.id === id);
+}
+
+/* ----------------------------------------------------------------------- */
+/* Grading — POST /predict on the FastAPI service (ai_engine/api.py)         */
+/* ----------------------------------------------------------------------- */
+
+const PREDICT_URL = process.env.NEXT_PUBLIC_PREDICT_URL;
+
+export async function gradeBatch(opts?: {
+  /** Camera capture as data URL (store.lastCapture). */
+  imageDataUrl?: string | null;
+  /** Komoditas spesifik yang dipahami engine, mis. "tomato_sayur". */
+  commodity?: string;
+}): Promise<GradingResult> {
+  if (PREDICT_URL && opts?.imageDataUrl) {
+    try {
+      const blob = await (await fetch(opts.imageDataUrl)).blob();
+      const form = new FormData();
+      form.append("image", blob, "batch.jpg");
+      form.append("commodity", opts.commodity ?? "tomato_sayur");
+      const res = await fetch(`${PREDICT_URL.replace(/\/$/, "")}/predict`, {
+        method: "POST",
+        body: form,
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = (await res.json()) as GradingResult;
+      if (json.status === "success" || json.status === "error") return json;
+      throw new Error("bentuk respons tidak dikenal");
+    } catch (e) {
+      return {
+        status: "error",
+        message: `Gagal menghubungi layanan grading (${e instanceof Error ? e.message : e}). Coba lagi.`,
+      };
+    }
+  }
+
+  // Demo mode — same payload shape as ai_engine/model.py `dict_results`.
+  await delay(2200);
+  return {
+    status: "success",
+    komoditas: opts?.commodity ?? "tomato_sayur",
+    objek_terdeteksi: 42,
+    kalibrasi: { referensi: "koin_500", px_per_mm2: 0.52, valid: true },
+    ringkasan_batch: {
+      komposisi: { A: 0.14, B: 0.6, C: 0.21, REJECT: 0.05 },
+      skor_keseragaman: 0.91,
+    },
+    objek: [],
+    hash_audit: "sha256:9f31a0c4e7b28d15f6a3c9e0b7d4128fa6e5c3b90d2f7a41c7e2",
+  };
+}
+
+/* ----------------------------------------------------------------------- */
+/* Rekomendasi harga — harga_acuan (DB) × pengali kualitas                   */
+/* ----------------------------------------------------------------------- */
+
+const GRADE_LABEL: Record<Grade, string> = {
+  A: "A (Premium)",
+  B: "B (Standar)",
+  C: "C (Ekonomis)",
+  REJECT: "REJECT (Tidak layak jual)",
+};
+
+/** Bobot dasar per grade untuk pengali harga. */
+const GRADE_BASE: Record<Grade, number> = { A: 1.0, B: 0.85, C: 0.65, REJECT: 0.35 };
+
+/** Skor kualitas batch [0..1] dari komposisi grade. */
+export function skorKualitas(komposisi: Partial<Record<Grade, number>>): number {
+  const s =
+    (komposisi.A ?? 0) * 1 + (komposisi.B ?? 0) * 0.7 + (komposisi.C ?? 0) * 0.4;
+  return Math.round(s * 100) / 100;
+}
+
+const DEMO_ACUAN: Record<string, { label: string; harga: number }> = {
+  tomato_sayur: { label: "Tomat Sayur", harga: 12000 },
+  tomato_beef: { label: "Tomat Beef", harga: 11500 },
+  tomato_ceri: { label: "Tomat Ceri", harga: 26000 },
+  chili_rawit: { label: "Cabai Rawit Merah", harga: 52000 },
+  carrot: { label: "Wortel", harga: 11000 },
+  cucumber: { label: "Timun", harga: 9000 },
+};
+
+export async function getRekomendasiHarga(opts?: {
+  komoditas?: string;
+  grade?: Grade;
+  skor?: number;
+}): Promise<RekomendasiHarga> {
+  const komoditas = opts?.komoditas ?? "tomato_sayur";
+  const grade = opts?.grade ?? "B";
+  const skor = opts?.skor ?? 0.62;
+
+  let label = DEMO_ACUAN[komoditas]?.label ?? "Tomat Sayur";
+  let acuan = DEMO_ACUAN[komoditas]?.harga ?? 12000;
+  let sumber = "PIHPS, demo";
+
+  if (supabase) {
+    // Coba komoditas spesifik dulu, lalu komoditas dasar ("tomato_sayur" -> "tomato").
+    const base = komoditas.split("_")[0];
+    const { data, error } = await supabase
+      .from("harga_acuan")
+      .select("*")
+      .in("komoditas", [komoditas, base]);
+    const row =
+      data?.find((r) => r.komoditas === komoditas) ??
+      data?.find((r) => r.komoditas === base);
+    if (!error && row) {
+      label = row.label;
+      acuan = row.harga;
+      const tgl = new Date(row.updated_at).toLocaleDateString("id-ID", {
+        day: "numeric",
+        month: "short",
+      });
+      sumber = `${row.sumber}, ${tgl}`;
+    }
+  } else {
+    await delay(300);
+  }
+
+  // Rumus transparan (tampil apa adanya di layar harga):
+  // pengali = bobot_grade × (0,9 + 0,16 × skor); rentang wajar ±7% / +8%.
+  const pengali = Math.round(GRADE_BASE[grade] * (0.9 + 0.16 * skor) * 1000) / 1000;
+  const tengah = acuan * pengali;
+  const round100 = (n: number) => Math.round(n / 100) * 100;
+
+  return {
+    komoditas_label: label,
+    grade_dominan: grade,
+    grade_dominan_label: GRADE_LABEL[grade],
+    harga_acuan: acuan,
+    harga_acuan_sumber: sumber,
+    skor_kualitas: skor,
+    pengali,
+    min: round100(tengah * 0.93),
+    max: round100(tengah * 1.08),
+  };
+}
+
+/* ----------------------------------------------------------------------- */
+/* Demo fallback data (mode offline tanpa backend)                           */
+/* ----------------------------------------------------------------------- */
 
 export const LISTINGS: Listing[] = [
   {
@@ -193,53 +413,3 @@ export const LISTING_SAYA: Listing[] = [
     gambar: "/img/tomat.jpg",
   },
 ];
-
-/**
- * Stand-in for POST /predict on the FastAPI service that wraps PantasModel.
- * Field names and nesting match ai_engine/model.py `dict_results`.
- *
- * Returns GradingResult, not GradingSuccess: the engine rejects blurry frames
- * (blur_score < 50) with a status:"error" payload, so callers must handle it.
- */
-export async function gradeBatch(): Promise<GradingResult> {
-  await delay(2200);
-  return {
-    status: "success",
-    komoditas: "tomato_sayur",
-    objek_terdeteksi: 42,
-    kalibrasi: { referensi: "koin_500", px_per_mm2: 0.52, valid: true },
-    ringkasan_batch: {
-      komposisi: { A: 0.14, B: 0.6, C: 0.21, REJECT: 0.05 },
-      skor_keseragaman: 0.91,
-    },
-    objek: [],
-    hash_audit: "sha256:9f31a0c4e7b28d15f6a3c9e0b7d4128fa6e5c3b90d2f7a41c7e2",
-  };
-}
-
-export async function getRekomendasiHarga(): Promise<RekomendasiHarga> {
-  await delay(300);
-  return {
-    komoditas_label: "Tomat Sayur",
-    grade_dominan: "B",
-    grade_dominan_label: "B (Standar)",
-    harga_acuan: 12000,
-    harga_acuan_sumber: "PIHPS, 14 Jul",
-    skor_kualitas: 0.62,
-    pengali: 0.843,
-    min: 9400,
-    max: 10900,
-  };
-}
-
-export async function getListings(): Promise<Listing[]> {
-  await delay(200);
-  return LISTINGS;
-}
-
-export async function getListing(id: string): Promise<Listing | undefined> {
-  await delay(150);
-  return LISTINGS.find((l) => l.id === id);
-}
-
-

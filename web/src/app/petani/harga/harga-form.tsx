@@ -20,7 +20,10 @@ export default function HargaForm({
 }) {
   const router = useRouter();
   const store = useStore();
-  const [harga, setHarga] = useState(10000);
+  // Mulai di tengah rentang wajar agar cocok untuk komoditas apa pun.
+  const [harga, setHarga] = useState(
+    () => Math.round((rec.min + rec.max) / 2 / 100) * 100,
+  );
   const [berat, setBerat] = useState(120);
   const [publishing, setPublishing] = useState(false);
 

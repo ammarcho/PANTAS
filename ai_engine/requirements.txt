@@ -1,0 +1,7 @@
+# API serving (docs/BACKEND.md Fase 2). CPU cukup: inferensi 60-80 ms/frame.
+fastapi
+uvicorn[standard]
+python-multipart
+ultralytics
+opencv-python-headless
+numpy
