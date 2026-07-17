@@ -19,16 +19,26 @@ class PantasModel:
         mengorkestrasi GradingEngine serta AutoCalibrator.
         """
         self.yolo_models = {}
+        self.yolo2_models = {}
         self.calibrator = AutoCalibrator()
 
     def _get_yolo_model(self, commodity: str):
         """Mekanisme Caching: Load model hanya jika belum ada di memori."""
         if commodity not in self.yolo_models:
-            model_path = ROOT_DIR / "export_models" / f"{commodity}_best.pt"
+            model_path = ROOT_DIR / "export_models" / f"{commodity}_seg.pt"
             if not model_path.exists():
                 raise FileNotFoundError(f"Model YOLO untuk '{commodity}' tidak ditemukan di {model_path}")
             self.yolo_models[commodity] = YOLO(str(model_path))
         return self.yolo_models[commodity]
+
+    def _get_yolo2_model(self, commodity: str):
+        """Mekanisme Caching: Load model YOLO 2 (Klasifikasi) hanya jika belum ada di memori."""
+        if commodity not in self.yolo2_models:
+            model_path = ROOT_DIR / "export_models" / f"{commodity}_cls.pt"
+            if not model_path.exists():
+                raise FileNotFoundError(f"Model YOLO 2 (Klasifikasi) untuk '{commodity}' tidak ditemukan di {model_path}")
+            self.yolo2_models[commodity] = YOLO(str(model_path))
+        return self.yolo2_models[commodity]
 
     def predict(self, img_array, commodity_specific: str, roi=None):
         """
@@ -57,6 +67,7 @@ class PantasModel:
 
         commodity_base = commodity_specific.split("_")[0]
         model = self._get_yolo_model(commodity_base)
+        model_cls = self._get_yolo2_model(commodity_base)
         grader = GradingEngine(commodity_specific)
         
         # 1. Kalibrasi Kamera dengan Koin
@@ -91,6 +102,37 @@ class PantasModel:
                     # Konversi bounding box untuk cacat (simplified)
                     x, y, w, h = cv2.boundingRect(contour)
                     
+                    # --- INTERVENSI YOLO 2 (AHLI PATOLOGI) ---
+                    # Tambahkan padding 10% agar buah tidak terpotong ketat
+                    pad_x = int(w * 0.1)
+                    pad_y = int(h * 0.1)
+                    img_h, img_w = img_array.shape[:2]
+                    
+                    crop_x1 = max(0, x - pad_x)
+                    crop_y1 = max(0, y - pad_y)
+                    crop_x2 = min(img_w, x + w + pad_x)
+                    crop_y2 = min(img_h, y + h + pad_y)
+                    
+                    crop_img = img_array[crop_y1:crop_y2, crop_x1:crop_x2]
+                    
+                    # Prediksi kesehatan menggunakan YOLO 2
+                    if crop_img.shape[0] > 0 and crop_img.shape[1] > 0:
+                        yolo2_res = model_cls.predict(source=crop_img, save=False, verbose=False)[0]
+                        top_class_idx = yolo2_res.probs.top1
+                        top_class_name = yolo2_res.names[top_class_idx]
+                        top_class_conf = float(yolo2_res.probs.top1conf)
+                        
+                        # Terapkan Logika VETO
+                        if top_class_name == "busuk":
+                            if "REJECT" not in grade:
+                                grade = "REJECT"
+                                grade_result['grade'] = "REJECT"
+                                grade_result['alasan_grade'].append(f"VETO YOLO 2: Terdeteksi penyakit/busuk ({top_class_conf*100:.1f}%)")
+                    else:
+                        top_class_name = "unknown"
+                        top_class_conf = 0.0
+                    # ----------------------------------------
+                    
                     grading_results.append({
                         "id": i + 1,
                         "grade": grade,
@@ -98,6 +140,8 @@ class PantasModel:
                         "solidity": round(grade_result['solidity'], 2),
                         "cacat": grade_result['cacat'],
                         "alasan_grade": grade_result['alasan_grade'],
+                        "yolo2_kondisi": top_class_name,
+                        "yolo2_conf": round(top_class_conf, 2),
                         "bbox": [x, y, w, h]
                     })
 
