@@ -41,6 +41,8 @@ export interface GradingSuccess {
   ringkasan_batch: RingkasanBatch;
   objek: ObjekGrading[];
   hash_audit: string;
+  /** JPEG data URL dari FastAPI /predict — foto dengan bounding box & grade. */
+  annotated_img?: string;
 }
 
 export interface GradingError {
@@ -72,6 +74,8 @@ export interface Listing {
   harga_per_kg: number;
   gambar: string;
   petani: string;
+  /** UUID profil petani (ada bila listing datang dari Supabase). */
+  petani_id?: string;
   lokasi: string;
   jarak_km: number;
   rating: number;

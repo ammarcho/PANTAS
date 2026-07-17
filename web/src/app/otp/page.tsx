@@ -14,7 +14,8 @@ export default function OtpPage() {
   const router = useRouter();
   const store = useStore();
   const [digits, setDigits] = useState<string[]>(Array(LEN).fill(""));
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [verifying, setVerifying] = useState(false);
   const [timer, setTimer] = useState(30);
   const refs = useRef<(HTMLInputElement | null)[]>([]);
 
@@ -39,7 +40,7 @@ export default function OtpPage() {
   const code = digits.join("");
 
   function setAt(i: number, v: string) {
-    setError(false);
+    setError(null);
     const clean = v.replace(/\D/g, "");
     setDigits((d) => {
       const next = [...d];
@@ -58,14 +59,18 @@ export default function OtpPage() {
     if (e.key === "Backspace" && !digits[i] && i > 0) refs.current[i - 1]?.focus();
   }
 
-  function verify() {
+  async function verify() {
     if (code.length < LEN) {
-      setError(true);
+      setError("Kode belum lengkap — isi 6 digit.");
       return;
     }
-    // Demo mode: any 6-digit code passes. Supabase's verifyOtp replaces this.
-    // The effect above routes to the role home once the session lands.
-    store.selesaiLogin();
+    // otpMode "sms": Supabase verifyOtp memeriksa kode sungguhan; "demo":
+    // semua kode diterima. Effect di atas mengarahkan ke beranda peran
+    // begitu sesi terbentuk.
+    setVerifying(true);
+    const sesi = await store.selesaiLogin(code);
+    setVerifying(false);
+    if (!sesi) setError("Kode salah atau kedaluwarsa. Periksa SMS Anda.");
   }
 
   return (
@@ -111,7 +116,7 @@ export default function OtpPage() {
 
       {error && (
         <p className="pt-3 text-center text-xs font-bold text-grade-reject">
-          Kode belum lengkap — isi 6 digit.
+          {error}
         </p>
       )}
 
@@ -131,13 +136,15 @@ export default function OtpPage() {
       </p>
 
       <div className="pt-8">
-        <Button onClick={verify} disabled={code.length < LEN}>
-          Verifikasi & Masuk
+        <Button onClick={verify} disabled={code.length < LEN || verifying}>
+          {verifying ? "Memverifikasi…" : "Verifikasi & Masuk"}
         </Button>
       </div>
 
       <SectionLabel className="pt-6 text-center text-[10px]">
-        Mode demo — semua kode 6 digit diterima
+        {store.otpMode === "sms"
+          ? "Kode dikirim via SMS oleh PANTAS"
+          : "Mode demo — semua kode 6 digit diterima"}
       </SectionLabel>
     </main>
   );
