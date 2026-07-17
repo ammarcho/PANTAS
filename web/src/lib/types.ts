@@ -22,6 +22,9 @@ export interface ObjekGrading {
   solidity: number;
   cacat: string[];
   alasan_grade: string[];
+  /** YOLO 2 pathology verdict per object (e.g. "busuk" triggers a REJECT veto). */
+  yolo2_kondisi: string;
+  yolo2_conf: number;
   bbox: [number, number, number, number];
 }
 
