@@ -2,10 +2,11 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useMemo, useState } from "react";
-import { Check, MapPin, Mic, Plus, Search } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { Check, ClipboardList, MapPin, Mic, Plus, Search } from "lucide-react";
 import { GradeBadge, cx } from "@/components/ui";
 import { formatRupiah } from "@/lib/format";
+import { useStore } from "@/lib/store";
 import type { Listing } from "@/lib/types";
 
 type Filter = "grade_a" | "terdekat" | "termurah";
@@ -17,9 +18,49 @@ const FILTERS: { id: Filter; label: string }[] = [
 ];
 
 export default function Katalog({ listings }: { listings: Listing[] }) {
+  const store = useStore();
   const [query, setQuery] = useState("");
   const [active, setActive] = useState<Filter[]>(["grade_a"]);
-  const [inquiry, setInquiry] = useState<string[]>([]);
+  const [listening, setListening] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- vendor API, no lib types
+  const recRef = useRef<any>(null);
+  const inquiryCount = Object.keys(store.inquiry).length;
+
+  // Client-only capability check, SSR-safe (renders false on the server).
+  const micAvailable = useSyncExternalStore(
+    () => () => {},
+    () => "SpeechRecognition" in window || "webkitSpeechRecognition" in window,
+    () => false,
+  );
+
+  // Voice search via Web Speech API — matters for low-literacy rural users.
+  useEffect(() => {
+    if (!micAvailable) return;
+    const SR =
+      (window as unknown as Record<string, unknown>).SpeechRecognition ??
+      (window as unknown as Record<string, unknown>).webkitSpeechRecognition;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rec = new (SR as any)();
+    rec.lang = "id-ID";
+    rec.interimResults = false;
+    rec.onresult = (e: { results: { [i: number]: { [j: number]: { transcript: string } } } }) => {
+      setQuery(e.results[0][0].transcript);
+    };
+    rec.onend = () => setListening(false);
+    rec.onerror = () => setListening(false);
+    recRef.current = rec;
+    return () => rec.abort();
+  }, [micAvailable]);
+
+  function toggleMic() {
+    if (!recRef.current) return;
+    if (listening) {
+      recRef.current.stop();
+    } else {
+      setListening(true);
+      recRef.current.start();
+    }
+  }
 
   const shown = useMemo(() => {
     let out = listings;
@@ -61,12 +102,21 @@ export default function Katalog({ listings }: { listings: Listing[] }) {
           aria-label="Cari komoditas"
           className="w-full rounded-lg border border-line bg-white py-3 pr-10 pl-9 text-sm text-ink placeholder:text-label focus:border-brand focus:ring-2 focus:ring-brand/20 focus:outline-none"
         />
-        <button
-          aria-label="Cari dengan suara"
-          className="tap absolute top-1/2 right-2 -translate-y-1/2 rounded p-1.5 text-brand hover:bg-brand-tint"
-        >
-          <Mic className="size-4" />
-        </button>
+        {micAvailable && (
+          <button
+            onClick={toggleMic}
+            aria-label={listening ? "Berhenti mendengarkan" : "Cari dengan suara"}
+            aria-pressed={listening}
+            className={cx(
+              "tap absolute top-1/2 right-2 -translate-y-1/2 rounded p-1.5",
+              listening
+                ? "animate-pulse bg-grade-reject/10 text-grade-reject"
+                : "text-brand hover:bg-brand-tint",
+            )}
+          >
+            <Mic className="size-4" />
+          </button>
+        )}
       </div>
 
       {/* Filter chips */}
@@ -100,7 +150,7 @@ export default function Katalog({ listings }: { listings: Listing[] }) {
       ) : (
         <ul className="flex flex-col gap-4 pt-4">
           {shown.map((l) => {
-            const added = inquiry.includes(l.id);
+            const added = l.id in store.inquiry;
             return (
               <li
                 key={l.id}
@@ -139,9 +189,7 @@ export default function Katalog({ listings }: { listings: Listing[] }) {
                 <div className="px-3 pb-3">
                   <button
                     onClick={() =>
-                      setInquiry((p) =>
-                        added ? p.filter((i) => i !== l.id) : [...p, l.id],
-                      )
+                      store.setInquiryQty(l.id, added ? 0 : Math.min(l.berat_kg, 50))
                     }
                     className={cx(
                       "tap tap-press flex w-full items-center justify-center gap-2 rounded-lg py-2.5 text-xs font-bold",
@@ -167,6 +215,19 @@ export default function Katalog({ listings }: { listings: Listing[] }) {
             );
           })}
         </ul>
+      )}
+
+      {/* Floating inquiry chip — appears once something is in the basket */}
+      {inquiryCount > 0 && (
+        <div className="pointer-events-none sticky bottom-4 z-10 flex justify-center pt-4">
+          <Link
+            href="/pembeli/inquiry"
+            className="tap tap-press pointer-events-auto flex items-center gap-2 rounded-full bg-brand-dark px-5 py-3 text-sm font-bold text-white shadow-lg shadow-brand-dark/25 hover:bg-brand-deep"
+          >
+            <ClipboardList className="size-4" />
+            Lihat Inquiry ({inquiryCount})
+          </Link>
+        </div>
       )}
     </main>
   );

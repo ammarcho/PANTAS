@@ -1,13 +1,38 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 import { Check } from "lucide-react";
 import { ButtonLink, Card, GradeBadge } from "@/components/ui";
+import { formatRupiah } from "@/lib/format";
+import { useStore } from "@/lib/store";
 
-const DETAIL = [
-  { k: "ID Listing", v: "PNT-L-0219" },
-  { k: "Tayang", v: "15 Jul 2026 • 09.43" },
-  { k: "Dinilai AI", v: "42 objek • komposisi terlampir" },
-];
+function fmtTanggal(d: Date) {
+  return `${d.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })} • ${d.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }).replace(":", ".")}`;
+}
 
 export default function ListingTayangPage() {
+  const store = useStore();
+  const router = useRouter();
+  const listing = store.myListings.find((l) => l.id === store.lastPublishedId);
+
+  // Deep link without a fresh publish — nothing to confirm, go home.
+  useEffect(() => {
+    if (store.ready && !listing) router.replace("/petani");
+  }, [store.ready, listing, router]);
+
+  if (!listing) return null;
+
+  const wa = `https://wa.me/?text=${encodeURIComponent(
+    `Panen saya tayang di PANTAS: ${listing.nama} ${listing.berat_kg} kg, Grade ${listing.grade}, ${formatRupiah(listing.harga_per_kg)}/kg. ID ${listing.id}`,
+  )}`;
+
+  const detail = [
+    { k: "ID Listing", v: listing.id },
+    { k: "Tayang", v: fmtTanggal(new Date()) },
+    { k: "Dinilai AI", v: "42 objek • komposisi terlampir" },
+  ];
+
   return (
     <>
       <main className="flex-1 px-4 pt-12 pb-4">
@@ -24,14 +49,16 @@ export default function ListingTayangPage() {
         <Card className="mt-8 p-4">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-base font-bold text-ink">Tomat Sayur</p>
-              <p className="pt-0.5 text-xs text-muted">120 kg • Rp 10.000/kg</p>
+              <p className="text-base font-bold text-ink">{listing.nama}</p>
+              <p className="pt-0.5 text-xs text-muted">
+                {listing.berat_kg} kg • {formatRupiah(listing.harga_per_kg)}/kg
+              </p>
             </div>
-            <GradeBadge grade="B" />
+            <GradeBadge grade={listing.grade} />
           </div>
 
           <div className="mt-4 divide-y divide-line border-t border-line">
-            {DETAIL.map(({ k, v }) => (
+            {detail.map(({ k, v }) => (
               <div key={k} className="flex items-center justify-between gap-3 py-3">
                 <span className="text-xs text-muted">{k}</span>
                 <span className="text-right text-xs font-bold text-ink">{v}</span>
@@ -42,15 +69,10 @@ export default function ListingTayangPage() {
       </main>
 
       <footer className="sticky bottom-0 flex flex-col gap-3 bg-canvas p-4">
-        <ButtonLink
-          href="https://wa.me/?text=Panen%20saya%20sudah%20tayang%20di%20PANTAS"
-          target="_blank"
-          rel="noopener noreferrer"
-          variant="outline"
-        >
+        <ButtonLink href={wa} target="_blank" rel="noopener noreferrer" variant="outline">
           Bagikan ke WhatsApp
         </ButtonLink>
-        <ButtonLink href="/petani" variant="dark">
+        <ButtonLink href="/petani/listing" variant="dark">
           Lihat Listing Saya
         </ButtonLink>
       </footer>

@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
+import { StoreProvider } from "@/lib/store";
 import "./globals.css";
 
 const inter = Inter({
@@ -31,11 +32,13 @@ export default function RootLayout({
     <html lang="id" className={`${inter.variable} ${jetbrains.variable} h-full`}>
       <body className="min-h-full font-sans antialiased">
         {/* Desktop gets a neutral backdrop; the app itself stays a 430px frame. */}
-        <div className="min-h-dvh bg-neutral-200/60">
-          <div className="app-frame flex min-h-dvh flex-col shadow-[0_0_60px_rgba(0,0,0,0.06)]">
-            {children}
+        <StoreProvider>
+          <div className="min-h-dvh bg-neutral-200/60">
+            <div className="app-frame flex min-h-dvh flex-col shadow-[0_0_60px_rgba(0,0,0,0.06)]">
+              {children}
+            </div>
           </div>
-        </div>
+        </StoreProvider>
       </body>
     </html>
   );

@@ -2,20 +2,92 @@
 
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Camera, ImageIcon, Ruler } from "lucide-react";
 import { BrandBar } from "@/components/chrome";
 import { cx } from "@/components/ui";
+import { useStore } from "@/lib/store";
+
+type Mode = "loading" | "camera" | "demo";
+
+/** Downscale to keep data URLs inside the localStorage budget. */
+function frameToDataUrl(source: HTMLVideoElement | HTMLImageElement): string {
+  const w = "videoWidth" in source ? source.videoWidth : source.naturalWidth;
+  const h = "videoHeight" in source ? source.videoHeight : source.naturalHeight;
+  const scale = Math.min(1, 900 / Math.max(w, h));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(w * scale);
+  canvas.height = Math.round(h * scale);
+  canvas.getContext("2d")!.drawImage(source, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL("image/jpeg", 0.72);
+}
 
 export default function PindaiPage() {
   const router = useRouter();
+  const store = useStore();
+  const [mode, setMode] = useState<Mode>("loading");
   const [scanning, setScanning] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function boot() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "environment" },
+          audio: false,
+        });
+        if (cancelled) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play();
+        }
+        setMode("camera");
+      } catch {
+        // No camera / permission denied — demo mode with a sample photo.
+        if (!cancelled) setMode("demo");
+      }
+    }
+
+    boot();
+    return () => {
+      cancelled = true;
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+    };
+  }, []);
+
+  function finish(dataUrl: string | null) {
+    store.setLastCapture(dataUrl);
+    setScanning(true);
+    setTimeout(() => router.push("/petani/hasil"), 1400);
+  }
 
   function capture() {
-    setScanning(true);
-    // Real capture posts the frame to the FastAPI /predict endpoint that wraps
-    // PantasModel; the result screen reads the same shape either way.
-    setTimeout(() => router.push("/petani/hasil"), 1600);
+    if (scanning) return;
+    if (mode === "camera" && videoRef.current) {
+      finish(frameToDataUrl(videoRef.current));
+    } else {
+      finish(null); // demo mode: hasil falls back to the sample photo
+    }
+  }
+
+  function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    const img = new window.Image();
+    img.onload = () => {
+      finish(frameToDataUrl(img));
+      URL.revokeObjectURL(url);
+    };
+    img.src = url;
   }
 
   return (
@@ -23,15 +95,32 @@ export default function PindaiPage() {
       <BrandBar />
 
       <main className="relative flex-1 overflow-hidden bg-black">
-        {/* Stand-in for the live camera feed */}
-        <Image
-          src="/img/tomat-rumahkaca.jpg"
-          alt="Pratinjau kamera"
-          fill
-          sizes="430px"
-          className="object-cover"
-          priority
+        {/* Live camera when available, sample photo otherwise */}
+        <video
+          ref={videoRef}
+          playsInline
+          muted
+          className={cx(
+            "absolute inset-0 size-full object-cover",
+            mode !== "camera" && "hidden",
+          )}
         />
+        {mode !== "camera" && (
+          <Image
+            src="/img/tomat-rumahkaca.jpg"
+            alt="Pratinjau kamera (mode demo)"
+            fill
+            sizes="430px"
+            className="object-cover"
+            priority
+          />
+        )}
+
+        {mode === "demo" && (
+          <span className="absolute top-4 left-4 rounded bg-black/60 px-2 py-1 text-[10px] font-bold tracking-wide text-white uppercase backdrop-blur-sm">
+            Mode demo — kamera tidak tersedia
+          </span>
+        )}
 
         {/* Jarak indicator */}
         <div className="absolute top-4 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full bg-black/60 px-4 py-2 text-xs font-medium whitespace-nowrap text-white backdrop-blur-sm">
@@ -95,15 +184,24 @@ export default function PindaiPage() {
       <footer className="flex items-center gap-3 border-t border-line bg-white p-4">
         <button
           onClick={capture}
-          disabled={scanning}
+          disabled={scanning || mode === "loading"}
           className="tap tap-press flex flex-1 items-center justify-center gap-2 rounded-lg bg-brand-dark py-4 text-base font-bold text-white disabled:opacity-60"
         >
           <Camera className="size-5" />
           {scanning ? "Memindai…" : "Ambil Foto"}
         </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          onChange={onPickFile}
+          className="hidden"
+        />
         <button
+          onClick={() => fileRef.current?.click()}
+          disabled={scanning}
           aria-label="Pilih dari galeri"
-          className="tap tap-press rounded-lg border border-line p-4 text-muted hover:bg-canvas"
+          className="tap tap-press rounded-lg border border-line p-4 text-muted hover:bg-canvas disabled:opacity-60"
         >
           <ImageIcon className="size-5" />
         </button>

@@ -1,18 +1,23 @@
+"use client";
+
 import { BrandBar } from "@/components/chrome";
 import AkunView from "@/components/akun-view";
+import { num } from "@/lib/format";
+import { useStore } from "@/lib/store";
 
 export default function AkunPetaniPage() {
+  const store = useStore();
+  const selesai = store.orders.filter((o) => o.status === "selesai").length;
+
   return (
     <>
       <BrandBar />
       <AkunView
-        nama="Pak Warsono"
-        peran="Petani • Lembang, Bandung Barat"
-        inisial="W"
+        peranLabel="Petani • Lembang, Bandung Barat"
         baris={[
-          { k: "Nomor HP", v: "0812-3456-7890" },
-          { k: "Listing aktif", v: "12" },
-          { k: "Rating", v: "4,8 (96 transaksi)" },
+          { k: "Listing aktif", v: String(store.myListings.length) },
+          { k: "Pindaian tersimpan", v: String(store.scans.length) },
+          { k: "Rating", v: `${num(4.8)} (${selesai + 93} transaksi)` },
         ]}
       />
     </>

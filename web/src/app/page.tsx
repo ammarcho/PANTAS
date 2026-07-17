@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Check, Factory, Sprout } from "lucide-react";
 import { Logo } from "@/components/chrome";
 import { Button, SectionLabel, cx } from "@/components/ui";
+import { useStore } from "@/lib/store";
 import type { Role } from "@/lib/types";
 
 const ROLES = [
@@ -32,6 +33,7 @@ function formatPhone(raw: string) {
 
 export default function LoginPage() {
   const router = useRouter();
+  const store = useStore();
   const [role, setRole] = useState<Role>("petani");
   const [phone, setPhone] = useState("");
   const [sending, setSending] = useState(false);
@@ -42,8 +44,10 @@ export default function LoginPage() {
   function submit() {
     if (!valid) return;
     setSending(true);
-    // OTP is a Supabase Auth concern — see docs/BACKEND.md phase 1.
-    router.push(role === "petani" ? "/petani" : "/pembeli");
+    // Real SMS delivery is Supabase Auth (docs/BACKEND.md fase 1); the OTP
+    // screen runs in demo mode until then.
+    store.mulaiLogin(role, phone);
+    router.push("/otp");
   }
 
   return (

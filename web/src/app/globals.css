@@ -108,6 +108,40 @@ body {
   }
 }
 
+/* Price slider — brand-filled track, white-ringed thumb */
+.pantas-slider {
+  appearance: none;
+  height: 8px;
+  border-radius: 9999px;
+  background: linear-gradient(
+    to right,
+    var(--color-brand) var(--fill, 50%),
+    var(--color-brand-tint-strong) var(--fill, 50%)
+  );
+  outline: none;
+  cursor: pointer;
+}
+.pantas-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--color-brand);
+  border: 3px solid #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+}
+.pantas-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--color-brand);
+  border: 3px solid #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+}
+.pantas-slider:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-brand) 25%, transparent);
+}
+
 /* Leaflet: keep the map under our sticky chrome */
 .leaflet-container {
   z-index: 0;

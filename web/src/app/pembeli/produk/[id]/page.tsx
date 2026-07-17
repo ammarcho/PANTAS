@@ -5,9 +5,7 @@ import {
   ArrowLeft,
   Heart,
   MapPin,
-  MessageCircle,
   Share2,
-  ShoppingCart,
   Sparkles,
   Star,
 } from "lucide-react";
@@ -15,6 +13,7 @@ import { Card, SectionLabel } from "@/components/ui";
 import { LISTINGS, getListing } from "@/lib/data";
 import { GRADE_COLOR, formatAngka, formatRupiah, num, persen } from "@/lib/format";
 import type { Grade } from "@/lib/types";
+import OrderActions from "./order-actions";
 
 const ORDER: Grade[] = ["A", "B", "C", "REJECT"];
 
@@ -224,19 +223,7 @@ export default async function ProdukPage({ params }: PageProps<"/pembeli/produk/
         </div>
       </main>
 
-      <footer className="sticky bottom-0 z-10 flex gap-3 border-t border-line bg-white p-4">
-        <button className="tap tap-press flex shrink-0 items-center justify-center gap-2 rounded-lg border border-brand px-4 py-3.5 text-xs font-bold text-brand hover:bg-brand-tint">
-          <MessageCircle className="size-4 shrink-0" />
-          Hubungi Petani
-        </button>
-        <Link
-          href="/pembeli/pesanan"
-          className="tap tap-press flex flex-1 items-center justify-center gap-2 rounded-lg bg-brand-deep py-3.5 text-sm font-bold text-white hover:bg-brand-dark"
-        >
-          <ShoppingCart className="size-4" />
-          Buat Pesanan
-        </Link>
-      </footer>
+      <OrderActions listing={l} />
     </>
   );
 }

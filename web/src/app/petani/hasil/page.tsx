@@ -1,23 +1,23 @@
+"use client";
+
+/* eslint-disable @next/next/no-img-element -- captures are runtime data URLs */
+
+import { useEffect, useRef, useState } from "react";
 import { ArrowRight, ShieldCheck } from "lucide-react";
 import { BackBar } from "@/components/chrome";
 import { ButtonLink, Card, SectionLabel } from "@/components/ui";
 import { gradeBatch } from "@/lib/data";
 import { GRADE_COLOR, num, persen } from "@/lib/format";
-import type { Grade } from "@/lib/types";
+import { useStore } from "@/lib/store";
+import type { Grade, GradingResult } from "@/lib/types";
 
 const ORDER: Grade[] = ["A", "B", "C", "REJECT"];
-const LEGEND: Record<Grade, string> = {
-  A: "A",
-  B: "B",
-  C: "C",
-  REJECT: "REJECT",
-};
 
 /**
- * Stands in for the annotated JPEG the engine returns alongside the JSON.
- * Once /predict streams back `annotated_img`, this becomes an <Image>.
+ * Annotated-preview stand-in. With a live capture we overlay grade chips on
+ * the actual photo; once /predict returns `annotated_img`, that replaces this.
  */
-function BatchPreview() {
+function BatchPreview({ capture }: { capture: string | null }) {
   const blobs: { grade: Grade; x: number; y: number; r: number }[] = [
     { grade: "A", x: 17, y: 30, r: 9.5 },
     { grade: "B", x: 44, y: 30, r: 11 },
@@ -28,6 +28,13 @@ function BatchPreview() {
 
   return (
     <div className="relative aspect-2/1 w-full overflow-hidden rounded-card bg-[#1f2a24]">
+      {capture && (
+        <img
+          src={capture}
+          alt="Foto batch yang dianalisis"
+          className="absolute inset-0 size-full object-cover opacity-90"
+        />
+      )}
       {blobs.map((b, i) => (
         <span
           key={i}
@@ -37,8 +44,9 @@ function BatchPreview() {
             top: `${b.y}%`,
             width: `${b.r * 2}%`,
             aspectRatio: "1",
-            background:
-              b.grade === "REJECT"
+            background: capture
+              ? "transparent"
+              : b.grade === "REJECT"
                 ? "#8f2a24"
                 : b.grade === "C"
                   ? "#4ade80"
@@ -55,15 +63,61 @@ function BatchPreview() {
           </span>
         </span>
       ))}
-      <span className="sr-only">
-        Pratinjau anotasi batch: setiap objek ditandai grade hasil deteksi.
-      </span>
     </div>
   );
 }
 
-export default async function HasilPage() {
-  const hasil = await gradeBatch();
+function Skeleton() {
+  return (
+    <div className="flex flex-col gap-4 pt-4" aria-label="Menganalisis foto…">
+      <div className="aspect-2/1 animate-pulse rounded-card bg-line" />
+      <div className="h-28 animate-pulse rounded-card bg-line" />
+      <div className="h-40 animate-pulse rounded-card bg-line" />
+    </div>
+  );
+}
+
+export default function HasilPage() {
+  const store = useStore();
+  const [hasil, setHasil] = useState<GradingResult | null>(null);
+  const recorded = useRef(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    gradeBatch().then((r) => {
+      if (!cancelled) setHasil(r);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Record this scan once the result lands (once — StrictMode double-runs effects).
+  useEffect(() => {
+    if (!hasil || hasil.status !== "success" || recorded.current) return;
+    recorded.current = true;
+    const komposisi = hasil.ringkasan_batch.komposisi;
+    const dominan = ORDER.reduce((a, b) =>
+      (komposisi[b] ?? 0) > (komposisi[a] ?? 0) ? b : a,
+    );
+    store.addScan({
+      komoditas_label: "Tomat Sayur",
+      grade_dominan: dominan,
+      objek: hasil.objek_terdeteksi,
+      gambar: store.lastCapture ?? "/img/tomat-rumahkaca.jpg",
+    });
+  }, [hasil, store]);
+
+  if (!hasil) {
+    return (
+      <>
+        <BackBar title="Hasil AI Grading" href="/petani/pindai" />
+        <main className="flex-1 px-4 pb-4">
+          <Skeleton />
+        </main>
+      </>
+    );
+  }
 
   if (hasil.status === "error") {
     return (
@@ -71,6 +125,11 @@ export default async function HasilPage() {
         <BackBar title="Hasil AI Grading" href="/petani/pindai" />
         <main className="flex-1 p-4">
           <Card className="p-4 text-sm text-grade-reject">{hasil.message}</Card>
+          <div className="pt-4">
+            <ButtonLink href="/petani/pindai" variant="outline">
+              Foto Ulang
+            </ButtonLink>
+          </div>
         </main>
       </>
     );
@@ -100,7 +159,7 @@ export default async function HasilPage() {
         </p>
 
         <div className="rise pt-4">
-          <BatchPreview />
+          <BatchPreview capture={store.lastCapture} />
         </div>
 
         {/* Komposisi batch */}
@@ -138,7 +197,7 @@ export default async function HasilPage() {
                   className="size-2 rounded-full"
                   style={{ backgroundColor: GRADE_COLOR[grade] }}
                 />
-                <span className="font-bold text-ink">{LEGEND[grade]}</span>
+                <span className="font-bold text-ink">{grade}</span>
                 <span className="text-muted">{n}</span>
               </li>
             ))}

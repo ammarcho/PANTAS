@@ -1,10 +1,4 @@
-import type {
-  DampakStats,
-  GradingResult,
-  Listing,
-  Pesanan,
-  RekomendasiHarga,
-} from "./types";
+import type { GradingResult, Listing, RekomendasiHarga } from "./types";
 
 /**
  * Single seam between the UI and the backend.
@@ -248,48 +242,4 @@ export async function getListing(id: string): Promise<Listing | undefined> {
   return LISTINGS.find((l) => l.id === id);
 }
 
-export async function getListingSaya(): Promise<Listing[]> {
-  await delay(200);
-  return LISTING_SAYA;
-}
 
-export async function getDampak(): Promise<DampakStats> {
-  await delay(250);
-  return {
-    periode: "8 minggu terakhir",
-    kg_terselamatkan: 1240,
-    co2e_ton: 2.1,
-    pendapatan_tambahan: 8_400_000,
-    transaksi_selesai: 37,
-    mingguan: [
-      { minggu: "M1", kg: 96 },
-      { minggu: "M2", kg: 108 },
-      { minggu: "M3", kg: 124 },
-      { minggu: "M4", kg: 118 },
-      { minggu: "M5", kg: 152 },
-      { minggu: "M6", kg: 168 },
-      { minggu: "M7", kg: 202 },
-      { minggu: "M8", kg: 240 },
-    ],
-    per_komoditas: [
-      { nama: "Tomat", kg: 520 },
-      { nama: "Cabai", kg: 390 },
-      { nama: "Timun", kg: 210 },
-      { nama: "Wortel", kg: 120 },
-    ],
-  };
-}
-
-export async function getPesanan(): Promise<Pesanan> {
-  await delay(200);
-  return {
-    id: "PNT-0092",
-    kode: "PNT-7F3K-92",
-    status: "serah_terima",
-    nama: "Tomat Sayur",
-    grade: "B",
-    berat_kg: 120,
-    harga_per_kg: 10000,
-    total: 1_200_000,
-  };
-}

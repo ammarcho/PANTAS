@@ -1,10 +1,13 @@
-import Image from "next/image";
+"use client";
+
+/* eslint-disable @next/next/no-img-element -- scans/listings can be data URLs */
+
 import Link from "next/link";
 import { Bell, ScanLine } from "lucide-react";
 import { BrandBar } from "@/components/chrome";
 import { Card, GradeBadge, GradeDot, SectionLabel } from "@/components/ui";
-import { getListingSaya } from "@/lib/data";
-import { GRADE_LABEL, formatRupiah } from "@/lib/format";
+import { GRADE_LABEL, formatRupiah, persen } from "@/lib/format";
+import { useStore } from "@/lib/store";
 import type { Grade, Listing } from "@/lib/types";
 
 const GRADE_ORDER: Grade[] = ["A", "B", "C", "REJECT"];
@@ -16,9 +19,11 @@ function groupByGrade(listings: Listing[]) {
   })).filter((g) => g.items.length > 0);
 }
 
-export default async function DashboardPetani() {
-  const listings = await getListingSaya();
-  const groups = groupByGrade(listings);
+export default function DashboardPetani() {
+  const store = useStore();
+  const groups = groupByGrade(store.myListings);
+  const lastScan = store.scans[0];
+  const pesananMasuk = store.orders.filter((o) => o.status !== "selesai").length;
 
   return (
     <>
@@ -26,11 +31,13 @@ export default async function DashboardPetani() {
         right={
           <Link
             href="/petani/pesanan"
-            aria-label="Notifikasi"
+            aria-label={`Notifikasi — ${pesananMasuk} pesanan aktif`}
             className="tap relative rounded p-1 text-muted hover:bg-canvas"
           >
             <Bell className="size-5" />
-            <span className="absolute top-1 right-1 size-2 rounded-full bg-grade-b ring-2 ring-white" />
+            {pesananMasuk > 0 && (
+              <span className="absolute top-1 right-1 size-2 rounded-full bg-grade-b ring-2 ring-white" />
+            )}
           </Link>
         }
       />
@@ -47,45 +54,63 @@ export default async function DashboardPetani() {
           </Link>
         </div>
 
-        <Card className="rise mt-3 overflow-hidden p-3">
-          <div className="relative aspect-16/10 overflow-hidden rounded-lg">
-            <Image
-              src="/img/cabai-rawit.jpg"
-              alt="Cabai merah keriting hasil pindai terakhir"
-              fill
-              sizes="430px"
-              className="object-cover"
-              priority
-            />
-            <span className="absolute top-2 left-2">
-              <GradeBadge grade="A" />
-            </span>
-          </div>
+        {lastScan ? (
+          <Card className="rise mt-3 overflow-hidden p-3">
+            <div className="relative aspect-16/10 overflow-hidden rounded-lg">
+              <img
+                src={lastScan.gambar}
+                alt={`${lastScan.komoditas_label} hasil pindai terakhir`}
+                className="absolute inset-0 size-full object-cover"
+              />
+              <span className="absolute top-2 left-2">
+                <GradeBadge grade={lastScan.grade_dominan} />
+              </span>
+            </div>
 
-          <div className="flex items-end justify-between pt-3">
-            <div>
-              <p className="text-base font-bold text-ink">Cabai Merah Keriting</p>
+            <div className="flex items-end justify-between pt-3">
+              <div>
+                <p className="text-base font-bold text-ink">
+                  {lastScan.komoditas_label}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-2xl leading-7 font-extrabold text-brand">
+                  {persen(0.98)}
+                </p>
+                <SectionLabel className="text-[10px]">Quality Score</SectionLabel>
+              </div>
             </div>
-            <div className="text-right">
-              <p className="text-2xl leading-7 font-extrabold text-brand">98%</p>
-              <SectionLabel className="text-[10px]">Quality Score</SectionLabel>
-            </div>
-          </div>
-          <p className="pt-1 text-xs leading-4 text-muted">
-            Kondisi: Segar, Tekstur Padat, Warna Merah Merata.
-          </p>
-        </Card>
+            <p className="pt-1 text-xs leading-4 text-muted">
+              {lastScan.objek} objek terdeteksi • grade dominan{" "}
+              {lastScan.grade_dominan}
+            </p>
+          </Card>
+        ) : (
+          <Card className="mt-3 flex flex-col items-center p-8 text-center">
+            <ScanLine className="size-8 text-label" />
+            <p className="pt-3 text-sm font-bold text-ink">Belum ada pindaian</p>
+            <p className="pt-1 text-xs text-muted">
+              Mulai pindai untuk melihat mutu panen Anda.
+            </p>
+          </Card>
+        )}
 
         {/* Ringkasan */}
         <div className="grid grid-cols-2 gap-3 pt-4">
-          <Card className="flex flex-col items-center py-4">
-            <p className="text-2xl font-extrabold text-brand">12</p>
-            <SectionLabel className="pt-1 text-[10px]">Listing Aktif</SectionLabel>
-          </Card>
-          <Card className="flex flex-col items-center py-4">
-            <p className="text-2xl font-extrabold text-brand">5</p>
-            <SectionLabel className="pt-1 text-[10px]">Pesanan Masuk</SectionLabel>
-          </Card>
+          <Link href="/petani/listing" className="tap tap-press block">
+            <Card className="flex flex-col items-center py-4 hover:border-placeholder">
+              <p className="text-2xl font-extrabold text-brand">
+                {store.myListings.length}
+              </p>
+              <SectionLabel className="pt-1 text-[10px]">Listing Aktif</SectionLabel>
+            </Card>
+          </Link>
+          <Link href="/petani/pesanan" className="tap tap-press block">
+            <Card className="flex flex-col items-center py-4 hover:border-placeholder">
+              <p className="text-2xl font-extrabold text-brand">{pesananMasuk}</p>
+              <SectionLabel className="pt-1 text-[10px]">Pesanan Masuk</SectionLabel>
+            </Card>
+          </Link>
         </div>
 
         {/* Listing produk saya */}
@@ -110,16 +135,14 @@ export default async function DashboardPetani() {
               {items.map((item) => (
                 <li key={item.id}>
                   <Link
-                    href={`/pembeli/produk/${item.id}`}
+                    href="/petani/listing"
                     className="tap tap-press block h-full overflow-hidden rounded-card border border-line bg-white hover:border-placeholder"
                   >
                     <div className="relative aspect-4/3">
-                      <Image
+                      <img
                         src={item.gambar}
                         alt={item.nama}
-                        fill
-                        sizes="215px"
-                        className="object-cover"
+                        className="absolute inset-0 size-full object-cover"
                       />
                     </div>
                     <div className="p-2.5">
