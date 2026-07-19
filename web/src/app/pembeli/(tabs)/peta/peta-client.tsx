@@ -24,13 +24,19 @@ export default function PetaClient({ listings }: { listings: Listing[] }) {
   const [chips, setChips] = useState<string[]>([]);
   const [selected, setSelected] = useState<string>();
   const [userLoc, setUserLoc] = useState<{ lat: number; lng: number } | null>(null);
+  const [isLocating, setIsLocating] = useState(true);
 
   useEffect(() => {
     if (typeof navigator !== "undefined" && "geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition(
-        (pos) => setUserLoc({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-        () => {} // Fallback diam-diam, keep userLoc null
+        (pos) => {
+          setUserLoc({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+          setIsLocating(false);
+        },
+        () => setIsLocating(false)
       );
+    } else {
+      setIsLocating(false);
     }
   }, []);
 
@@ -69,7 +75,7 @@ export default function PetaClient({ listings }: { listings: Listing[] }) {
           />
         </div>
 
-        <div className="flex flex-wrap gap-2 pt-3">
+        <div className="flex flex-wrap items-center gap-2 pt-3">
           {chips.map((c) => (
             <button
               key={c}
@@ -87,6 +93,12 @@ export default function PetaClient({ listings }: { listings: Listing[] }) {
             >
               + Filter
             </button>
+          )}
+          {isLocating && (
+            <span className="ml-auto flex items-center gap-1.5 text-[10px] font-medium text-muted">
+              <span className="size-1.5 animate-pulse rounded-full bg-brand"></span>
+              Mendeteksi lokasi...
+            </span>
           )}
         </div>
 

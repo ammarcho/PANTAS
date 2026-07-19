@@ -22,6 +22,7 @@ export default function Katalog({ listings }: { listings: Listing[] }) {
   const [query, setQuery] = useState("");
   const [active, setActive] = useState<Filter[]>(["grade_a"]);
   const [userLoc, setUserLoc] = useState<{ lat: number; lng: number } | null>(null);
+  const [isLocating, setIsLocating] = useState(true);
   const [listening, setListening] = useState(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- vendor API, no lib types
   const recRef = useRef<any>(null);
@@ -30,9 +31,14 @@ export default function Katalog({ listings }: { listings: Listing[] }) {
   useEffect(() => {
     if (typeof navigator !== "undefined" && "geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition(
-        (pos) => setUserLoc({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-        () => {}
+        (pos) => {
+          setUserLoc({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+          setIsLocating(false);
+        },
+        () => setIsLocating(false)
       );
+    } else {
+      setIsLocating(false);
     }
   }, []);
 
@@ -157,6 +163,12 @@ export default function Katalog({ listings }: { listings: Listing[] }) {
             </button>
           );
         })}
+        {isLocating && (
+          <span className="flex shrink-0 items-center gap-1.5 px-2 text-[10px] font-medium text-muted">
+            <span className="size-1.5 animate-pulse rounded-full bg-brand"></span>
+            Mendeteksi lokasi...
+          </span>
+        )}
       </div>
 
       {/* Results */}
