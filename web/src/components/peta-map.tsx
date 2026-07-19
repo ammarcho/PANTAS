@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { MapContainer, Marker, TileLayer, Tooltip, useMap } from "react-leaflet";
 import L from "leaflet";
+import { toast } from "sonner";
 import "leaflet/dist/leaflet.css";
 import { formatAngka } from "@/lib/format";
 import type { Listing } from "@/lib/types";
@@ -53,6 +54,19 @@ function FitBounds({ listings, center }: { listings: Listing[], center: [number,
   return null;
 }
 
+function MapFlyTo({ selectedId, listings }: { selectedId?: string, listings: Listing[] }) {
+  const map = useMap();
+  useEffect(() => {
+    if (selectedId) {
+      const target = listings.find((l) => l.id === selectedId);
+      if (target) {
+        map.flyTo([target.lat, target.lng], 14, { duration: 1.5 });
+      }
+    }
+  }, [selectedId, listings, map]);
+  return null;
+}
+
 export default function PetaMap({
   listings,
   selectedId,
@@ -69,9 +83,10 @@ export default function PetaMap({
       navigator.geolocation.getCurrentPosition(
         (position) => {
           setCenter([position.coords.latitude, position.coords.longitude]);
+          toast.success("Lokasi Anda berhasil ditemukan!", { id: "geo-success" });
         },
         (err) => {
-          console.warn("Gagal mendapatkan lokasi:", err.message);
+          toast.error("Gagal mendapatkan lokasi: " + err.message, { id: "geo-error" });
         }
       );
     }
@@ -90,6 +105,7 @@ export default function PetaMap({
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
       />
       <FitBounds listings={listings} center={center} />
+      <MapFlyTo selectedId={selectedId} listings={listings} />
 
       <Marker position={center} icon={meIcon}>
         <Tooltip direction="top">Lokasi Anda</Tooltip>

@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { toast } from "sonner";
 import { MessageCircle, Minus, Plus, ShoppingCart, X } from "lucide-react";
 import { formatRupiah } from "@/lib/format";
 import { useStore } from "@/lib/store";
@@ -21,6 +22,7 @@ export default function OrderActions({ listing }: { listing: Listing }) {
 
   function konfirmasi() {
     const order = store.createOrder(listing, qty);
+    toast.success("Pesanan berhasil dibuat!");
     router.push(`/pembeli/pesanan/${order.id}`);
   }
 
