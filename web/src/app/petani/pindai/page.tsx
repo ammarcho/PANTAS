@@ -5,10 +5,14 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Camera, ImageIcon, Ruler } from "lucide-react";
 import { BrandBar } from "@/components/chrome";
-import { cx } from "@/components/ui";
+import { SectionLabel, cx } from "@/components/ui";
+import { KOMODITAS } from "@/lib/data";
 import { useStore } from "@/lib/store";
 
 type Mode = "loading" | "camera" | "demo";
+
+/** Urutan kelompok pada pemilih, mengikuti bobot model yang tersedia. */
+const KELOMPOK = [...new Set(KOMODITAS.map((k) => k.kelompok))];
 
 /** Downscale to keep data URLs inside the localStorage budget. */
 function frameToDataUrl(source: HTMLVideoElement | HTMLImageElement): string {
@@ -27,6 +31,9 @@ export default function PindaiPage() {
   const store = useStore();
   const [mode, setMode] = useState<Mode>("loading");
   const [scanning, setScanning] = useState(false);
+  // Komoditas menentukan config ambang batas yang dipakai engine, jadi petani
+  // memilihnya sebelum memotret — bukan ditebak dari foto.
+  const [komoditas, setKomoditas] = useState(store.lastKomoditas);
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -64,7 +71,7 @@ export default function PindaiPage() {
   }, []);
 
   function finish(dataUrl: string | null) {
-    store.setLastCapture(dataUrl);
+    store.setLastCapture(dataUrl, komoditas);
     setScanning(true);
     setTimeout(() => router.push("/petani/hasil"), 1400);
   }
@@ -125,11 +132,7 @@ export default function PindaiPage() {
         {/* Jarak indicator */}
         <div className="absolute top-4 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full bg-black/60 px-4 py-2 text-xs font-medium whitespace-nowrap text-white backdrop-blur-sm">
           <Ruler className="size-4 shrink-0" />
-          Jarak: 30 cm
-          <span className="flex items-center gap-1 font-bold text-[#74c69d]">
-            <span className="size-1.5 rounded-full bg-[#74c69d]" />
-            OPTIMAL
-          </span>
+          Jaga jarak ±30 cm dari panen
         </div>
 
         {/* Reticle */}
@@ -156,15 +159,8 @@ export default function PindaiPage() {
               />
             )}
 
-            <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded bg-grade-a px-2 py-1 text-[10px] font-bold text-white">
-              GRADE A
-            </span>
           </div>
         </div>
-
-        <span className="absolute top-[58%] right-8 rounded bg-grade-b px-2 py-1 text-[10px] font-bold text-white">
-          GRADE B
-        </span>
 
         {/* Status toast */}
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-lg bg-black/70 px-4 py-2 text-sm font-medium whitespace-nowrap text-white backdrop-blur-sm">
@@ -181,7 +177,35 @@ export default function PindaiPage() {
         </div>
       </main>
 
-      <footer className="flex items-center gap-3 border-t border-line bg-white p-4">
+      <footer className="border-t border-line bg-white p-4">
+        <div className="flex flex-col gap-1.5 pb-3">
+          <SectionLabel>
+            <label htmlFor="komoditas">Komoditas yang dipindai</label>
+          </SectionLabel>
+          <select
+            id="komoditas"
+            value={komoditas}
+            disabled={scanning}
+            onChange={(e) => setKomoditas(e.target.value)}
+            className={cx(
+              "w-full rounded-lg border border-line bg-white px-3 py-3 text-sm font-bold text-ink",
+              "focus:border-brand focus:ring-2 focus:ring-brand/20 focus:outline-none",
+              "disabled:opacity-60",
+            )}
+          >
+            {KELOMPOK.map((g) => (
+              <optgroup key={g} label={g}>
+                {KOMODITAS.filter((k) => k.kelompok === g).map((k) => (
+                  <option key={k.id} value={k.id}>
+                    {k.label}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex items-center gap-3">
         <button
           onClick={capture}
           disabled={scanning || mode === "loading"}
@@ -205,6 +229,7 @@ export default function PindaiPage() {
         >
           <ImageIcon className="size-5" />
         </button>
+        </div>
       </footer>
     </>
   );

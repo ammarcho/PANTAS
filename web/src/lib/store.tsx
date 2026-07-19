@@ -9,8 +9,8 @@ import {
   useRef,
   useState,
 } from "react";
-import { LISTING_SAYA, rowToListing } from "./data";
-import { supabase, toE164, uploadCapture } from "./supabase";
+import { KOMODITAS_DEFAULT, rowToListing } from "./data";
+import { supabase, uploadCapture } from "./supabase";
 import type { Database, Json } from "./database.types";
 import type {
   Grade,
@@ -21,21 +21,22 @@ import type {
 } from "./types";
 
 /**
- * Client-side application state, persisted to localStorage.
+ * Client-side application state, cached to localStorage.
  *
- * With Supabase configured (web/.env.local) every action also writes to the
- * backend in the background and state hydrates from the database after a real
- * OTP login; without it, everything behaves exactly like the offline demo.
- * Local state stays the optimistic source of truth either way, so component
- * signatures are unchanged (docs/BACKEND.md).
+ * The Supabase session is the single source of truth for *who* is signed in.
+ * Listings, orders and scans are fetched per user and RLS scopes every row to
+ * `auth.uid()`; localStorage is only a cache, keyed by user id, so two accounts
+ * on the same device never inherit each other's data (docs/BACKEND.md).
  */
 
 export interface Sesi {
   role: Role;
-  phone: string;
+  email: string;
   nama: string;
-  /** UUID auth Supabase — hanya terisi bila login lewat OTP asli. */
+  /** UUID auth Supabase — terisi setelah verifikasi OTP email berhasil. */
   userId?: string;
+  /** Lokasi dari public.profiles — ditampilkan di halaman akun. */
+  lokasi?: string;
 }
 
 export interface Scan {
@@ -45,6 +46,8 @@ export interface Scan {
   grade_dominan: Grade;
   objek: number;
   gambar: string; // asset path or data URL
+  /** Skor keseragaman batch (0..1) dari ringkasan_batch. */
+  skor?: number;
 }
 
 export interface Order {
@@ -63,83 +66,38 @@ export interface Order {
 
 interface State {
   sesi: Sesi | null;
-  pendingPhone: string | null;
-  pendingRole: Role | null;
-  /** "sms" bila signInWithOtp sukses mengirim SMS; selain itu demo. */
-  otpMode: "demo" | "sms";
   scans: Scan[];
   myListings: Listing[];
   inquiry: Record<string, number>; // listingId -> qty (kg)
   orders: Order[];
   lastCapture: string | null; // data URL from the camera, feeds hasil/listing
+  /** Komoditas yang dipilih petani di layar pindai, dipakai oleh /hasil. */
+  lastKomoditas: string;
   lastPublishedId: string | null;
 }
 
-const SEED_ORDERS: Order[] = [
-  {
-    id: "PNT-0092",
-    kode: "PNT-7F3K-92",
-    status: "serah_terima",
-    nama: "Tomat Sayur",
-    grade: "B",
-    berat_kg: 120,
-    harga_per_kg: 10000,
-    total: 1_200_000,
-    pembeli: "PT Olahan Segar",
-    petani: "Pak Warsono",
-    tanggal: "2026-07-15T09:43:00+07:00",
-  },
-  {
-    id: "PNT-0091",
-    kode: "PNT-2X8A-91",
-    status: "dikonfirmasi",
-    nama: "Cabai Rawit Merah",
-    grade: "A",
-    berat_kg: 40,
-    harga_per_kg: 45000,
-    total: 1_800_000,
-    pembeli: "CV Saus Nusantara",
-    petani: "Pak Warsono",
-    tanggal: "2026-07-14T14:20:00+07:00",
-  },
-  {
-    id: "PNT-0090",
-    kode: "PNT-9Q4M-90",
-    status: "selesai",
-    nama: "Kubis Hijau",
-    grade: "B",
-    berat_kg: 300,
-    harga_per_kg: 6000,
-    total: 1_800_000,
-    pembeli: "Dapur Katering Bandung",
-    petani: "Pak Warsono",
-    tanggal: "2026-07-12T08:05:00+07:00",
-  },
-];
-
-const SEED_SCAN: Scan = {
-  id: "scan-seed-1",
-  tanggal: "2026-07-16T06:12:00+07:00",
-  komoditas_label: "Cabai Merah Keriting",
-  grade_dominan: "A",
-  objek: 57,
-  gambar: "/img/cabai-rawit.jpg",
-};
-
+/**
+ * A new account starts empty and fills up from its own Supabase rows. Seeding
+ * this with demo listings/scans is what made every device show the same
+ * dashboard regardless of who was signed in.
+ */
 const INITIAL: State = {
   sesi: null,
-  pendingPhone: null,
-  pendingRole: null,
-  otpMode: "demo",
-  scans: [SEED_SCAN],
-  myListings: LISTING_SAYA,
+  scans: [],
+  myListings: [],
   inquiry: {},
-  orders: SEED_ORDERS,
+  orders: [],
   lastCapture: null,
+  lastKomoditas: KOMODITAS_DEFAULT,
   lastPublishedId: null,
 };
 
-const KEY = "pantas-store-v1";
+/**
+ * Per-user cache bucket. Without the user id in the key, a second account on
+ * the same browser would read the first account's listings and orders.
+ */
+const KEY_BASE = "pantas-store-v1";
+const keyFor = (uid?: string) => `${KEY_BASE}:${uid ?? "anon"}`;
 
 function randKode() {
   const c = () =>
@@ -147,8 +105,41 @@ function randKode() {
   return `PNT-${c()}${c()}${c()}${c()}-${Math.floor(10 + Math.random() * 89)}`;
 }
 
-function namaDemo(role: Role) {
-  return role === "petani" ? "Pak Warsono" : "PT Olahan Segar";
+/** "budi.tani@mail.com" -> "Budi Tani" — nama awal sebelum pengguna mengubahnya. */
+function namaDariEmail(email: string) {
+  const nama = (email.split("@")[0] ?? "")
+    .replace(/[._-]+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => w[0].toUpperCase() + w.slice(1))
+    .join(" ");
+  return nama || "Pengguna PANTAS";
+}
+
+/** Pesan Supabase Auth -> kalimat yang berarti bagi petani. */
+function pesanAuth(message: string): string {
+  const m = message.toLowerCase();
+  if (m.includes("already registered") || m.includes("already been registered"))
+    return "Email sudah terdaftar — password yang Anda masukkan salah.";
+  if (m.includes("password") && m.includes("at least"))
+    return "Password minimal 6 karakter.";
+  if (m.includes("invalid email") || m.includes("email address"))
+    return "Format email tidak valid.";
+  if (m.includes("not confirmed"))
+    return 'Akun ini menunggu konfirmasi email. Matikan "Confirm email" di Supabase → Authentication → Sign In / Providers → Email, lalu masuk lagi.';
+  if (m.includes("rate limit") || m.includes("too many"))
+    // Kuota SMTP bawaan Supabase (~2 email/jam) habis karena signup masih
+    // memicu email konfirmasi. Menunggu tidak menyelesaikan akar masalahnya.
+    return 'Kuota email Supabase habis karena "Confirm email" masih aktif. Matikan di Authentication → Sign In / Providers → Email — setelah itu pendaftaran tidak mengirim email sama sekali.';
+  return message;
+}
+
+/** Skor keseragaman dari payload grading (jsonb), bila ada. */
+function skorDariHasil(hasil: Json | null): number | undefined {
+  const skor = (hasil as unknown as GradingSuccess | null)?.ringkasan_batch
+    ?.skor_keseragaman;
+  return typeof skor === "number" ? skor : undefined;
 }
 
 type OrderRow = Database["public"]["Tables"]["orders"]["Row"] & {
@@ -173,16 +164,19 @@ function rowToOrder(r: OrderRow): Order {
 }
 
 interface Actions {
-  /** Step 1 of login: stash role+phone and (bila Supabase aktif) kirim SMS OTP. */
-  mulaiLogin(role: Role, phone: string): void;
   /**
-   * Step 2: verify the OTP. Real mode checks the code via Supabase and returns
-   * null when it is wrong; demo mode accepts any 6-digit code.
+   * Masuk dengan email + password. Akun dibuat otomatis pada percobaan
+   * pertama, tanpa langkah verifikasi email. Mengembalikan pesan error siap
+   * tampil bila gagal.
    */
-  selesaiLogin(code?: string): Promise<Sesi | null>;
+  masuk(
+    role: Role,
+    email: string,
+    password: string,
+  ): Promise<{ sesi: Sesi | null; error: string | null }>;
   logout(): void;
 
-  setLastCapture(dataUrl: string | null): void;
+  setLastCapture(dataUrl: string | null, komoditas?: string): void;
   addScan(
     s: Omit<Scan, "id" | "tanggal"> & {
       /** Payload lengkap dari gradeBatch — dipersistenkan ke tabel gradings. */
@@ -191,6 +185,8 @@ interface Actions {
   ): void;
   publishListing(input: {
     nama: string;
+    /** Id komoditas engine; tanpa ini slug diturunkan dari nama tampilan. */
+    komoditas?: string;
     grade: Grade;
     berat_kg: number;
     harga_per_kg: number;
@@ -211,6 +207,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<State>(INITIAL);
   const [ready, setReady] = useState(false);
   const loaded = useRef(false);
+  const storageKey = useRef(keyFor());
   // Mirror for async actions that need current state without re-subscribing.
   const stateRef = useRef(state);
   useEffect(() => {
@@ -218,38 +215,76 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   }, [state]);
 
   useEffect(() => {
-    // One-time localStorage hydration. Must run in an effect (not the useState
-    // initializer) so the server HTML and the client's first render agree.
-    try {
-      const raw = localStorage.getItem(KEY);
-      if (raw) {
-        const saved = JSON.parse(raw) as Partial<State>;
-        // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional single hydration pass
-        setState((s) => ({ ...s, ...saved }));
+    // Boot: ask Supabase who is signed in, then load that user's cache bucket.
+    // Must run in an effect (not the useState initializer) so the server HTML
+    // and the client's first render agree.
+    let cancelled = false;
+    void (async () => {
+      let sesi: Sesi | null = null;
+      if (supabase) {
+        const { data } = await supabase.auth.getSession();
+        if (cancelled) return;
+        const user = data.session?.user;
+        if (user) {
+          const { data: profil } = await supabase
+            .from("profiles")
+            .select("*")
+            .eq("id", user.id)
+            .maybeSingle();
+          if (cancelled) return;
+          sesi = {
+            role: (profil?.peran as Role) ?? "petani",
+            email: user.email ?? "",
+            nama: profil?.nama ?? namaDariEmail(user.email ?? ""),
+            userId: user.id,
+            lokasi: profil?.lokasi ?? undefined,
+          };
+        }
       }
-    } catch {
-      // corrupt storage — start fresh rather than crash the app
-      localStorage.removeItem(KEY);
-    }
-    loaded.current = true;
-    setReady(true);
+      storageKey.current = keyFor(sesi?.userId);
+
+      let saved: Partial<State> | null = null;
+      try {
+        const raw = localStorage.getItem(storageKey.current);
+        if (raw) saved = JSON.parse(raw) as Partial<State>;
+      } catch {
+        // corrupt storage — start fresh rather than crash the app
+        localStorage.removeItem(storageKey.current);
+      }
+
+      setState((s) => ({
+        ...s,
+        ...(saved ?? {}),
+        // An expired or absent Supabase session must not leave a stale `sesi`
+        // behind: that is what let any device land straight on a dashboard.
+        sesi: supabase ? sesi : (saved?.sesi ?? null),
+      }));
+      loaded.current = true;
+      setReady(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
     if (!loaded.current) return;
     try {
-      localStorage.setItem(KEY, JSON.stringify(state));
+      localStorage.setItem(storageKey.current, JSON.stringify(state));
     } catch {
       // quota exceeded (large captures) — drop the heavy field and retry
       try {
-        localStorage.setItem(KEY, JSON.stringify({ ...state, lastCapture: null }));
+        localStorage.setItem(
+          storageKey.current,
+          JSON.stringify({ ...state, lastCapture: null }),
+        );
       } catch {
         /* storage unavailable — state stays in memory only */
       }
     }
   }, [state]);
 
-  // After a real OTP login, replace the demo seeds with the user's own rows.
+  // Once we know the user, replace the cache with their own rows.
   const hydratedFor = useRef<string | null>(null);
   useEffect(() => {
     const uid = state.sesi?.userId;
@@ -270,7 +305,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           .order("created_at", { ascending: false }),
         supabase
           .from("gradings")
-          .select("id, created_at, komoditas_label, grade_dominan, objek_terdeteksi, gambar_url")
+          .select(
+            "id, created_at, komoditas_label, grade_dominan, objek_terdeteksi, gambar_url, hasil",
+          )
           .order("created_at", { ascending: false })
           .limit(8),
       ]);
@@ -291,72 +328,98 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
               grade_dominan: g.grade_dominan as Grade,
               objek: g.objek_terdeteksi,
               gambar: g.gambar_url ?? "/img/tomat.jpg",
+              skor: skorDariHasil(g.hasil),
             })),
       }));
     })();
   }, [state.sesi]);
 
-  const mulaiLogin = useCallback((role: Role, phone: string) => {
-    setState((s) => ({
-      ...s,
-      pendingRole: role,
-      pendingPhone: phone,
-      otpMode: "demo",
-    }));
-    if (!supabase) return;
-    void supabase.auth
-      .signInWithOtp({
-        phone: toE164(phone),
-        options: { channel: "sms", data: { peran: role, nama: namaDemo(role) } },
-      })
-      .then(({ error }) => {
-        if (error) {
-          // Provider SMS belum dikonfigurasi (Twilio dkk.) — tetap mode demo.
-          console.warn("[pantas] OTP SMS tidak terkirim, mode demo:", error.message);
-        } else {
-          setState((s) => ({ ...s, otpMode: "sms" }));
+  const masuk = useCallback(
+    async (
+      role: Role,
+      email: string,
+      password: string,
+    ): Promise<{ sesi: Sesi | null; error: string | null }> => {
+      const bersih = email.trim().toLowerCase();
+
+      const pakai = (sesi: Sesi) => {
+        if (sesi.userId) {
+          // Pindah ke bucket cache milik akun ini dan buang bucket anonim, agar
+          // tidak ada sisa data dari sesi sebelumnya di perangkat yang sama.
+          try {
+            localStorage.removeItem(keyFor());
+          } catch {
+            /* storage unavailable */
+          }
+          storageKey.current = keyFor(sesi.userId);
         }
-      });
-  }, []);
-
-  const selesaiLogin = useCallback(
-    async (code?: string): Promise<Sesi | null> => {
-      const s = stateRef.current;
-      if (!s.pendingRole || !s.pendingPhone) return null;
-
-      let sesi: Sesi = {
-        role: s.pendingRole,
-        phone: s.pendingPhone,
-        nama: namaDemo(s.pendingRole),
+        setState((st) => ({
+          ...st,
+          sesi,
+          // Data akun ini datang dari hidrasi Supabase.
+          scans: [],
+          myListings: [],
+          orders: [],
+          inquiry: {},
+        }));
+        return { sesi, error: null };
       };
 
-      if (supabase && s.otpMode === "sms" && code) {
-        const { data, error } = await supabase.auth.verifyOtp({
-          phone: toE164(s.pendingPhone),
-          token: code,
-          type: "sms",
-        });
-        if (error || !data.user) return null; // kode salah/kedaluwarsa
-        const { data: profil } = await supabase
-          .from("profiles")
-          .select("*")
-          .eq("id", data.user.id)
-          .maybeSingle();
-        sesi = {
-          role: (profil?.peran as Role) ?? s.pendingRole,
-          phone: s.pendingPhone,
-          nama: profil?.nama ?? namaDemo(s.pendingRole),
-          userId: data.user.id,
-        };
+      // Tanpa backend: sesi lokal saja (demo offline).
+      if (!supabase) {
+        return pakai({ role, email: bersih, nama: namaDariEmail(bersih) });
       }
 
-      setState((st) => ({
-        ...st,
-        sesi,
-        pendingRole: null,
-        pendingPhone: null,
-      }));
-      return sesi;
+      const masukRes = await supabase.auth.signInWithPassword({
+        email: bersih,
+        password,
+      });
+      let user = masukRes.data.user;
+
+      if (masukRes.error) {
+        // Supabase menyamarkan "email tidak dikenal" dan "password salah" jadi
+        // satu pesan, jadi coba daftar dan biarkan server yang memutuskan.
+        const daftarRes = await supabase.auth.signUp({
+          email: bersih,
+          password,
+          // `data` hanya dipakai saat akun dibuat — trigger handle_new_user
+          // menyalinnya ke public.profiles.
+          options: { data: { peran: role, nama: namaDariEmail(bersih) } },
+        });
+        if (daftarRes.error) {
+          return { sesi: null, error: pesanAuth(daftarRes.error.message) };
+        }
+        if (!daftarRes.data.session) {
+          // Dengan proteksi enumerasi email aktif, signUp untuk email yang
+          // sudah ada tidak melempar error — ia balas user tanpa identities.
+          const sudahTerdaftar =
+            (daftarRes.data.user?.identities?.length ?? 0) === 0;
+          return {
+            sesi: null,
+            error: sudahTerdaftar
+              ? "Email sudah terdaftar — password yang Anda masukkan salah."
+              : 'Akun dibuat, tapi proyek Supabase masih meminta konfirmasi email. Matikan "Confirm email" di Authentication → Providers → Email, lalu coba lagi.',
+          };
+        }
+        user = daftarRes.data.user;
+      }
+
+      if (!user) return { sesi: null, error: "Gagal masuk. Coba lagi." };
+
+      const { data: profil } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      return pakai({
+        // Peran di profil menang: satu akun tetap satu peran.
+        role: (profil?.peran as Role) ?? role,
+        email: bersih,
+        nama: profil?.nama ?? namaDariEmail(bersih),
+        userId: user.id,
+        lokasi: profil?.lokasi ?? undefined,
+      });
     },
     [],
   );
@@ -364,17 +427,27 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(() => {
     void supabase?.auth.signOut();
     hydratedFor.current = null;
-    setState((s) => ({
-      ...INITIAL,
-      scans: s.scans,
-      orders: s.orders,
-      myListings: s.myListings,
-    }));
+    try {
+      localStorage.removeItem(storageKey.current);
+    } catch {
+      /* storage unavailable */
+    }
+    storageKey.current = keyFor();
+    // Full reset. Carrying scans/orders/listings across logout is what leaked
+    // one account's data into the next login on the same device.
+    setState(INITIAL);
   }, []);
 
-  const setLastCapture = useCallback((dataUrl: string | null) => {
-    setState((s) => ({ ...s, lastCapture: dataUrl }));
-  }, []);
+  const setLastCapture = useCallback(
+    (dataUrl: string | null, komoditas?: string) => {
+      setState((s) => ({
+        ...s,
+        lastCapture: dataUrl,
+        lastKomoditas: komoditas ?? s.lastKomoditas,
+      }));
+    },
+    [],
+  );
 
   const addScan = useCallback(
     (input: Omit<Scan, "id" | "tanggal"> & { hasil?: GradingSuccess }) => {
@@ -382,6 +455,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       setState((s) => {
         const scan: Scan = {
           ...fields,
+          skor: fields.skor ?? hasil?.ringkasan_batch?.skor_keseragaman,
           id: `scan-${Date.now()}`,
           tanggal: new Date().toISOString(),
         };
@@ -417,6 +491,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const publishListing = useCallback(
     (input: {
       nama: string;
+      komoditas?: string;
       grade: Grade;
       berat_kg: number;
       harga_per_kg: number;
@@ -427,21 +502,22 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       const listing: Listing = {
         id,
         nama: input.nama,
-        komoditas: input.nama.toLowerCase().replace(/\s+/g, "_"),
+        komoditas:
+          input.komoditas ?? input.nama.toLowerCase().replace(/\s+/g, "_"),
         grade: input.grade,
         berat_kg: input.berat_kg,
         harga_per_kg: input.harga_per_kg,
         gambar: input.gambar,
-        petani: sesi?.nama ?? "Pak Warsono",
+        petani: sesi?.nama ?? "Petani PANTAS",
         petani_id: sesi?.userId,
-        lokasi: "Lembang, Bandung Barat",
-        jarak_km: 4.2,
-        rating: 4.8,
-        transaksi: 96,
-        lat: -6.8118,
-        lng: 107.6175,
+        lokasi: sesi?.lokasi ?? "",
+        jarak_km: 0,
+        rating: 0,
+        transaksi: 0,
+        lat: 0,
+        lng: 0,
         stok_kg: input.berat_kg,
-        panen_terakhir: "Hari ini",
+        panen_terakhir: "Baru saja",
       };
       setState((s) => ({
         ...s,
@@ -510,7 +586,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       berat_kg: qty,
       harga_per_kg: l.harga_per_kg,
       total: qty * l.harga_per_kg,
-      pembeli: sesi?.nama ?? "PT Olahan Segar",
+      pembeli: sesi?.nama ?? "Pembeli PANTAS",
       petani: l.petani,
       tanggal: new Date().toISOString(),
     };
@@ -583,8 +659,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     () => ({
       ...state,
       ready,
-      mulaiLogin,
-      selesaiLogin,
+      masuk,
       logout,
       setLastCapture,
       addScan,
@@ -597,8 +672,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     [
       state,
       ready,
-      mulaiLogin,
-      selesaiLogin,
+      masuk,
       logout,
       setLastCapture,
       addScan,

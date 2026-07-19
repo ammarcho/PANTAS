@@ -1,37 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
-import { Bell, ChevronDown, User } from "lucide-react";
-import { Card, SectionLabel, cx } from "@/components/ui";
+import { useMemo } from "react";
+import { Bell, User } from "lucide-react";
+import { Card, SectionLabel } from "@/components/ui";
 import { formatAngka, formatRupiahRingkas, num } from "@/lib/format";
 import { useStore } from "@/lib/store";
-
-const MINGGUAN_SEED = [
-  { minggu: "M1", kg: 96 },
-  { minggu: "M2", kg: 108 },
-  { minggu: "M3", kg: 124 },
-  { minggu: "M4", kg: 118 },
-  { minggu: "M5", kg: 152 },
-  { minggu: "M6", kg: 168 },
-  { minggu: "M7", kg: 202 },
-  { minggu: "M8", kg: 240 },
-];
-
-const PER_KOMODITAS_SEED = [
-  { nama: "Tomat", kg: 520 },
-  { nama: "Cabai", kg: 390 },
-  { nama: "Timun", kg: 210 },
-  { nama: "Wortel", kg: 120 },
-];
-
-/** Share of activity per region — v1 uses fixed shares over the mock totals. */
-const WILAYAH: { id: string; label: string; faktor: number }[] = [
-  { id: "semua", label: "Semua wilayah", faktor: 1 },
-  { id: "bbr", label: "Bandung Barat", faktor: 0.58 },
-  { id: "skb", label: "Sukabumi", faktor: 0.27 },
-  { id: "lainnya", label: "Wilayah lain", faktor: 0.15 },
-];
 
 /** Area sparkline for kg saved per week. Plain SVG — no chart library needed. */
 function TrenMingguan({ data }: { data: { minggu: string; kg: number }[] }) {
@@ -83,40 +57,45 @@ function TrenMingguan({ data }: { data: { minggu: string; kg: number }[] }) {
 
 export default function DampakPage() {
   const store = useStore();
-  const [wilayah, setWilayah] = useState("semua");
-  const [openWilayah, setOpenWilayah] = useState(false);
 
-  const f = WILAYAH.find((w) => w.id === wilayah)?.faktor ?? 1;
-
-  // Live component: completed orders in the store count toward impact.
+  // Hanya gunakan data nyata dari pesanan yang benar-benar selesai
   const selesai = store.orders.filter((o) => o.status === "selesai");
   const kgSelesai = selesai.reduce((s, o) => s + o.berat_kg, 0);
   const rpSelesai = selesai.reduce((s, o) => s + o.total, 0);
 
   const stats = useMemo(() => {
-    const kg = Math.round((940 + kgSelesai) * f);
+    const kg = kgSelesai;
     return {
       kg,
-      co2: (kg / 1000) * 1.7, // ~1.7 t CO₂e per ton food loss avoided (est.)
-      rp: Math.round((6_600_000 + rpSelesai) * f),
-      transaksi: Math.round((34 + selesai.length) * f),
+      co2: parseFloat(((kg / 1000) * 1.7).toFixed(2)), // ~1.7 t CO₂e per ton food loss avoided
+      rp: rpSelesai,
+      transaksi: selesai.length,
     };
-  }, [f, kgSelesai, rpSelesai, selesai.length]);
+  }, [kgSelesai, rpSelesai, selesai.length]);
 
-  const mingguan = useMemo(
-    () => MINGGUAN_SEED.map((m) => ({ ...m, kg: Math.round(m.kg * f) })),
-    [f],
-  );
-  const perKomoditas = useMemo(
-    () => PER_KOMODITAS_SEED.map((k) => ({ ...k, kg: Math.round(k.kg * f) })),
-    [f],
-  );
-  const maxKomoditas = Math.max(...perKomoditas.map((k) => k.kg));
+  // Grafik tren: bentuk naik berdasarkan scan yang tersimpan (per minggu)
+  const mingguan = useMemo(() => {
+    if (store.scans.length === 0) return null;
+    // Kelompokkan scan ke dalam 8 slot terakhir (tiap slot = 7 hari)
+    const now = Date.now();
+    const slots = Array.from({ length: 8 }, (_, i) => ({
+      minggu: `M${i + 1}`,
+      kg: 0,
+    }));
+    store.scans.forEach((s) => {
+      const daysAgo = (now - new Date(s.tanggal).getTime()) / 86400000;
+      const slotIdx = Math.min(7, Math.floor(daysAgo / 7));
+      const slot = slots[7 - slotIdx];
+      if (slot) slot.kg += s.objek * 0.3; // estimasi 0.3 kg/objek
+    });
+    const hasData = slots.some((s) => s.kg > 0);
+    return hasData ? slots : null;
+  }, [store.scans]);
 
   const tiles = [
-    { v: `${formatAngka(stats.kg)} kg`, k: "panen terselamatkan dari food loss" },
+    { v: `${formatAngka(stats.kg)} kg`, k: "panen terselamatkan dari food loss (akun Anda)" },
     { v: `${num(stats.co2)} ton`, k: "emisi CO₂e dicegah (estimasi)" },
-    { v: formatRupiahRingkas(stats.rp), k: "tambahan pendapatan petani" },
+    { v: formatRupiahRingkas(stats.rp), k: "pendapatan dari transaksi selesai" },
     { v: String(stats.transaksi), k: "transaksi selesai" },
   ];
 
@@ -144,51 +123,9 @@ export default function DampakPage() {
 
       <main className="flex-1 px-4 pt-4 pb-6">
         <div className="flex items-start justify-between gap-3">
-          <h2 className="max-w-[160px] text-xl leading-7 font-extrabold text-ink">
-            8 minggu terakhir
+          <h2 className="max-w-[200px] text-xl leading-7 font-extrabold text-ink">
+            Dampak transaksi Anda
           </h2>
-
-          <div className="relative">
-            <button
-              onClick={() => setOpenWilayah((o) => !o)}
-              aria-expanded={openWilayah}
-              aria-haspopup="listbox"
-              className="tap flex shrink-0 items-center gap-1 rounded-full bg-brand-tint px-3 py-1.5 text-xs font-medium text-brand-deep"
-            >
-              {WILAYAH.find((w) => w.id === wilayah)?.label}
-              <ChevronDown
-                className={cx("size-3.5 transition-transform", openWilayah && "rotate-180")}
-              />
-            </button>
-
-            {openWilayah && (
-              <ul
-                role="listbox"
-                className="absolute right-0 z-10 mt-1 w-44 overflow-hidden rounded-lg border border-line bg-white shadow-lg"
-              >
-                {WILAYAH.map((w) => (
-                  <li key={w.id}>
-                    <button
-                      role="option"
-                      aria-selected={w.id === wilayah}
-                      onClick={() => {
-                        setWilayah(w.id);
-                        setOpenWilayah(false);
-                      }}
-                      className={cx(
-                        "tap w-full px-3 py-2.5 text-left text-xs hover:bg-canvas",
-                        w.id === wilayah
-                          ? "font-bold text-brand-deep"
-                          : "text-ink",
-                      )}
-                    >
-                      {w.label}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
         </div>
 
         <div className="grid grid-cols-2 gap-3 pt-4">
@@ -200,38 +137,35 @@ export default function DampakPage() {
           ))}
         </div>
 
-        <Card className="mt-4 p-4">
-          <div className="flex items-start justify-between">
-            <SectionLabel>Kg terselamatkan / minggu</SectionLabel>
-            <span className="rounded bg-canvas px-2 py-0.5 text-[11px] font-bold text-ink">
-              {mingguan.at(-1)!.kg} kg
-            </span>
-          </div>
-          <div className="pt-4">
-            <TrenMingguan data={mingguan} />
-          </div>
-        </Card>
+        {mingguan ? (
+          <Card className="mt-4 p-4">
+            <div className="flex items-start justify-between">
+              <SectionLabel>Estimasi kg terselamatkan / minggu</SectionLabel>
+              <span className="rounded bg-canvas px-2 py-0.5 text-[11px] font-bold text-ink">
+                {mingguan.at(-1)!.kg.toFixed(0)} kg
+              </span>
+            </div>
+            <div className="pt-4">
+              <TrenMingguan data={mingguan} />
+            </div>
+          </Card>
+        ) : (
+          <Card className="mt-4 p-4 text-center">
+            <p className="text-sm font-bold text-ink">Belum ada data pindaian</p>
+            <p className="pt-1 text-xs text-muted">
+              Mulai pindai panen untuk melihat grafik dampak Anda.
+            </p>
+          </Card>
+        )}
 
-        <Card className="mt-4 p-4">
-          <SectionLabel>Per komoditas (kg)</SectionLabel>
-          <ul className="flex flex-col gap-3 pt-4">
-            {perKomoditas.map(({ nama, kg }) => (
-              <li key={nama} className="grid grid-cols-[64px_1fr_40px] items-center gap-2">
-                <span className="text-xs font-bold text-ink">{nama}</span>
-                <span className="h-4 overflow-hidden rounded-sm bg-canvas">
-                  <span
-                    className="block h-full origin-left rounded-sm bg-brand-deep"
-                    style={{
-                      width: `${(kg / maxKomoditas) * 100}%`,
-                      animation: "pantas-grow 0.6s ease-out both",
-                    }}
-                  />
-                </span>
-                <span className="text-right text-xs text-muted">{kg}</span>
-              </li>
-            ))}
-          </ul>
-        </Card>
+        {stats.transaksi === 0 && (
+          <Card className="mt-4 p-4 text-center">
+            <p className="text-sm font-bold text-ink">Belum ada transaksi selesai</p>
+            <p className="pt-1 text-xs text-muted">
+              Dampak dihitung dari pesanan yang sudah selesai serah terima.
+            </p>
+          </Card>
+        )}
       </main>
     </>
   );
