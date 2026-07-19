@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Check, ClipboardList, MapPin, Mic, Plus, Search } from "lucide-react";
 import { GradeBadge, cx } from "@/components/ui";
-import { formatRupiah } from "@/lib/format";
+import { formatRupiah, haversineKm } from "@/lib/format";
 import { useStore } from "@/lib/store";
 import type { Listing } from "@/lib/types";
 
@@ -21,10 +21,20 @@ export default function Katalog({ listings }: { listings: Listing[] }) {
   const store = useStore();
   const [query, setQuery] = useState("");
   const [active, setActive] = useState<Filter[]>(["grade_a"]);
+  const [userLoc, setUserLoc] = useState<{ lat: number; lng: number } | null>(null);
   const [listening, setListening] = useState(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- vendor API, no lib types
   const recRef = useRef<any>(null);
   const inquiryCount = Object.keys(store.inquiry).length;
+
+  useEffect(() => {
+    if (typeof navigator !== "undefined" && "geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => setUserLoc({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        () => {}
+      );
+    }
+  }, []);
 
   // Client-only capability check, SSR-safe (renders false on the server).
   const micAvailable = useSyncExternalStore(
@@ -64,6 +74,13 @@ export default function Katalog({ listings }: { listings: Listing[] }) {
 
   const shown = useMemo(() => {
     let out = listings;
+
+    if (userLoc) {
+      out = out.map((l) => ({
+        ...l,
+        jarak_km: l.lat && l.lng ? haversineKm(l.lat, l.lng, userLoc.lat, userLoc.lng) : l.jarak_km,
+      }));
+    }
 
     const q = query.trim().toLowerCase();
     if (q) {

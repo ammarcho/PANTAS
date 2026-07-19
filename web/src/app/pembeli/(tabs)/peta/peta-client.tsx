@@ -6,7 +6,7 @@ import { useMemo, useState } from "react";
 import { Search, Star, X } from "lucide-react";
 import { BackBar } from "@/components/chrome";
 import { GradeBadge, cx } from "@/components/ui";
-import { formatRupiah, num } from "@/lib/format";
+import { formatRupiah, haversineKm, num } from "@/lib/format";
 import type { Listing } from "@/lib/types";
 
 // Leaflet touches `window` at import time, so it must not run on the server.
@@ -23,9 +23,27 @@ export default function PetaClient({ listings }: { listings: Listing[] }) {
   const [query, setQuery] = useState("Tomat");
   const [chips, setChips] = useState<string[]>(CHIPS);
   const [selected, setSelected] = useState<string>();
+  const [userLoc, setUserLoc] = useState<{ lat: number; lng: number } | null>(null);
+
+  useEffect(() => {
+    if (typeof navigator !== "undefined" && "geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => setUserLoc({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        () => {} // Fallback diam-diam, keep userLoc null
+      );
+    }
+  }, []);
 
   const shown = useMemo(() => {
     let out = listings;
+    
+    // Replace jarak_km with dynamic value if location is available
+    if (userLoc) {
+      out = out.map((l) => ({
+        ...l,
+        jarak_km: l.lat && l.lng ? haversineKm(l.lat, l.lng, userLoc.lat, userLoc.lng) : l.jarak_km,
+      }));
+    }
     const q = query.trim().toLowerCase();
     if (q) out = out.filter((l) => l.nama.toLowerCase().includes(q));
     if (chips.includes("Grade B")) out = out.filter((l) => l.grade === "B");
