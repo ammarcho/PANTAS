@@ -30,7 +30,6 @@ export default function ListingTayangPage() {
   const detail = [
     { k: "ID Listing", v: listing.id },
     { k: "Tayang", v: fmtTanggal(new Date()) },
-    { k: "Dinilai AI", v: "42 objek • komposisi terlampir" },
   ];
 
   return (
@@ -42,7 +41,8 @@ export default function ListingTayangPage() {
           </span>
           <h1 className="pt-5 text-2xl font-extrabold text-ink">Listing Tayang</h1>
           <p className="max-w-[280px] pt-2 text-sm leading-5 text-muted">
-            Pembeli industri di sekitar Lembang kini bisa menemukan panen Anda.
+            Panen Anda kini tayang dan bisa ditemukan oleh pembeli industri di
+            seluruh jaringan PANTAS.
           </p>
         </div>
 

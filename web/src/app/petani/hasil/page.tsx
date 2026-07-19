@@ -6,13 +6,12 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowRight, ShieldCheck } from "lucide-react";
 import { BackBar } from "@/components/chrome";
 import { ButtonLink, Card, SectionLabel } from "@/components/ui";
-import { gradeBatch, skorKualitas } from "@/lib/data";
+import { gradeBatch, labelKomoditas, skorKualitas } from "@/lib/data";
 import { GRADE_COLOR, num, persen } from "@/lib/format";
 import { useStore } from "@/lib/store";
 import type { Grade, GradingResult } from "@/lib/types";
 
 const ORDER: Grade[] = ["A", "B", "C", "REJECT"];
-const KOMODITAS = "tomato_sayur"; // layar pindai belum punya pemilih komoditas
 
 /**
  * Annotated-preview stand-in. With a live capture we overlay grade chips on
@@ -102,12 +101,16 @@ export default function HasilPage() {
   const store = useStore();
   const [hasil, setHasil] = useState<GradingResult | null>(null);
   const recorded = useRef(false);
+  // Komoditas dipilih petani di layar pindai; menentukan config ambang batas
+  // yang dipakai engine, jadi label di sini harus ikut pilihan itu.
+  const komoditas = store.lastKomoditas;
+  const komoditasLabel = labelKomoditas(komoditas);
 
   useEffect(() => {
     let cancelled = false;
     // Kirim capture asli ke FastAPI /predict bila NEXT_PUBLIC_PREDICT_URL
     // terisi; tanpa itu gradeBatch mengembalikan payload demo.
-    gradeBatch({ imageDataUrl: store.lastCapture, commodity: KOMODITAS }).then(
+    gradeBatch({ imageDataUrl: store.lastCapture, commodity: komoditas }).then(
       (r) => {
         if (!cancelled) setHasil(r);
       },
@@ -127,13 +130,13 @@ export default function HasilPage() {
       (komposisi[b] ?? 0) > (komposisi[a] ?? 0) ? b : a,
     );
     store.addScan({
-      komoditas_label: "Tomat Sayur",
+      komoditas_label: komoditasLabel,
       grade_dominan: dominan,
       objek: hasil.objek_terdeteksi,
       gambar: store.lastCapture ?? "/img/tomat-rumahkaca.jpg",
       hasil, // dipersistenkan ke tabel gradings (hash_audit ikut tersimpan)
     });
-  }, [hasil, store]);
+  }, [hasil, store, komoditasLabel]);
 
   if (!hasil) {
     return (
@@ -177,7 +180,7 @@ export default function HasilPage() {
 
       <main className="flex-1 px-4 pt-4 pb-4">
         <h1 className="text-xl font-extrabold text-ink">
-          Tomat Sayur — {hasil.objek_terdeteksi} objek
+          {komoditasLabel} — {hasil.objek_terdeteksi} objek
         </h1>
         <p className="pt-1 text-xs leading-4 text-muted">
           Kalibrasi koin {hasil.kalibrasi.valid ? "valid" : "gagal"} •{" "}
@@ -231,33 +234,32 @@ export default function HasilPage() {
           </ul>
         </Card>
 
-        {/* Explainability — the proposal requires a stated reason, not a bare score */}
-        <Card className="mt-4 p-4">
-          <SectionLabel>Mengapa dominan grade {dominan}?</SectionLabel>
+        {/* Explainability — alasan dari engine, bukan teks palsu */}
+        {hasil.objek.length > 0 && (
+          <Card className="mt-4 p-4">
+            <SectionLabel>Mengapa dominan grade {dominan}?</SectionLabel>
 
-          <ul className="flex flex-col gap-2 pt-3">
-            <li className="flex gap-2 text-xs leading-4 text-ink">
-              <span className="pt-1 text-muted">•</span>
-              Ukuran rata-rata 1.240 mm² — rentang B (1.000–1.800 mm²)
-            </li>
-            <li className="flex gap-2 text-xs leading-4 text-ink">
-              <span className="pt-1 text-muted">•</span>
-              Warna &ldquo;Setengah Matang&rdquo; menurunkan sebagian A ke B
-            </li>
-            <li className="flex gap-2 text-xs leading-4 font-bold text-grade-reject">
-              <span className="pt-1">•</span>2 objek REJECT: bercak busuk 7,2% &gt;
-              ambang 5%
-            </li>
-          </ul>
+            <ul className="flex flex-col gap-2 pt-3">
+              {/* Kumpulkan semua alasan unik dari seluruh objek */}
+              {[...new Set(
+                hasil.objek.flatMap((o) => o.alasan_grade ?? [])
+              )].slice(0, 4).map((alasan, i) => (
+                <li key={i} className="flex gap-2 text-xs leading-4 text-ink">
+                  <span className="pt-1 text-muted">•</span>
+                  {alasan}
+                </li>
+              ))}
+            </ul>
 
-          <div className="mt-4 flex items-center justify-between gap-2 border-t border-line pt-3">
-            <code className="truncate font-mono text-[10px] text-label">
-              hash_audit: {hasil.hash_audit.slice(0, 13)}…
-              {hasil.hash_audit.slice(-4)}
-            </code>
-            <ShieldCheck className="size-4 shrink-0 text-brand" />
-          </div>
-        </Card>
+            <div className="mt-4 flex items-center justify-between gap-2 border-t border-line pt-3">
+              <code className="truncate font-mono text-[10px] text-label">
+                hash_audit: {hasil.hash_audit.slice(0, 13)}…
+                {hasil.hash_audit.slice(-4)}
+              </code>
+              <ShieldCheck className="size-4 shrink-0 text-brand" />
+            </div>
+          </Card>
+        )}
       </main>
 
       <footer className="sticky bottom-0 border-t border-line bg-white p-4">

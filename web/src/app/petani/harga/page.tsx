@@ -1,6 +1,6 @@
 import { BackBar } from "@/components/chrome";
 import { Card } from "@/components/ui";
-import { getRekomendasiHarga } from "@/lib/data";
+import { KOMODITAS_DEFAULT, getRekomendasiHarga } from "@/lib/data";
 import { formatRupiah, num } from "@/lib/format";
 import type { Grade } from "@/lib/types";
 import HargaForm from "./harga-form";
@@ -39,7 +39,7 @@ export default async function HargaPage({
         </h1>
 
         {/* How the number was derived — the proposal calls for a transparent price */}
-        <HargaForm rec={rec}>
+        <HargaForm rec={rec} komoditas={p.komoditas ?? KOMODITAS_DEFAULT}>
           <Card className="mt-4 divide-y divide-line px-4">
             {baris.map(({ k, v }) => (
               <div key={k} className="flex items-center justify-between gap-3 py-3">

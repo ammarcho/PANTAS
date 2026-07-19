@@ -23,16 +23,21 @@ const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 type ListingRow = Database["public"]["Views"]["listings_view"]["Row"];
 
-/** Distance reference for jarak_km until real geolocation lands: Bandung. */
-const PUSAT = { lat: -6.9147, lng: 107.6098 };
+/** Posisi pengguna saat ini — diperbarui via setUserPosition() dari browser. */
+let userPosition = { lat: -6.9147, lng: 107.6098 }; // default: Bandung kota
+
+/** Dipanggil sekali setelah geolocation berhasil (dari komponen peta/katalog). */
+export function setUserPosition(lat: number, lng: number) {
+  userPosition = { lat, lng };
+}
 
 function haversineKm(lat: number, lng: number): number {
   const R = 6371;
-  const dLat = ((lat - PUSAT.lat) * Math.PI) / 180;
-  const dLng = ((lng - PUSAT.lng) * Math.PI) / 180;
+  const dLat = ((lat - userPosition.lat) * Math.PI) / 180;
+  const dLng = ((lng - userPosition.lng) * Math.PI) / 180;
   const a =
     Math.sin(dLat / 2) ** 2 +
-    Math.cos((PUSAT.lat * Math.PI) / 180) *
+    Math.cos((userPosition.lat * Math.PI) / 180) *
       Math.cos((lat * Math.PI) / 180) *
       Math.sin(dLng / 2) ** 2;
   return Math.round(R * 2 * Math.asin(Math.sqrt(a)) * 10) / 10;
@@ -53,8 +58,8 @@ export function rowToListing(r: ListingRow): Listing {
     jarak_km: r.lat != null && r.lng != null ? haversineKm(r.lat, r.lng) : 0,
     rating: Number(r.rating ?? 5),
     transaksi: r.transaksi ?? 0,
-    lat: r.lat ?? PUSAT.lat,
-    lng: r.lng ?? PUSAT.lng,
+    lat: r.lat ?? userPosition.lat,
+    lng: r.lng ?? userPosition.lng,
     satuan: r.satuan ?? undefined,
     stok_kg: r.stok_kg != null ? Number(r.stok_kg) : undefined,
     panen_terakhir: r.panen_terakhir ?? undefined,
@@ -98,6 +103,33 @@ export async function getListing(id: string): Promise<Listing | undefined> {
 
 const PREDICT_URL = process.env.NEXT_PUBLIC_PREDICT_URL;
 
+/**
+ * Komoditas yang dipahami engine — satu entri per file di
+ * ai_engine/grading_configs/. Nilai `id` inilah yang dikirim ke /predict
+ * sebagai `commodity`; bobot modelnya dipilih dari kata dasar
+ * ("tomato_ceri" -> export_models/tomato_seg.pt), jadi id baru hanya valid
+ * bila config JSON-nya ada.
+ */
+export const KOMODITAS: { id: string; label: string; kelompok: string }[] = [
+  { id: "tomato_sayur", label: "Tomat Sayur", kelompok: "Tomat" },
+  { id: "tomato_beef", label: "Tomat Beef", kelompok: "Tomat" },
+  { id: "tomato_ceri", label: "Tomat Ceri", kelompok: "Tomat" },
+  { id: "chili_rawit", label: "Cabai Rawit Merah", kelompok: "Cabai" },
+  { id: "chili_merah_keriting", label: "Cabai Merah Keriting", kelompok: "Cabai" },
+  { id: "chili_merah_besar", label: "Cabai Merah Besar", kelompok: "Cabai" },
+  { id: "chili_hijau_besar", label: "Cabai Hijau Besar", kelompok: "Cabai" },
+  { id: "carrot_lokal", label: "Wortel Lokal", kelompok: "Wortel" },
+  { id: "carrot_impor", label: "Wortel Impor", kelompok: "Wortel" },
+  { id: "cucumber_lokal", label: "Timun Lokal", kelompok: "Timun" },
+  { id: "cucumber_baby", label: "Timun Baby", kelompok: "Timun" },
+];
+
+export const KOMODITAS_DEFAULT = "tomato_sayur";
+
+export function labelKomoditas(id: string): string {
+  return KOMODITAS.find((k) => k.id === id)?.label ?? "Komoditas";
+}
+
 export async function gradeBatch(opts?: {
   /** Camera capture as data URL (store.lastCapture). */
   imageDataUrl?: string | null;
@@ -109,7 +141,7 @@ export async function gradeBatch(opts?: {
       const blob = await (await fetch(opts.imageDataUrl)).blob();
       const form = new FormData();
       form.append("image", blob, "batch.jpg");
-      form.append("commodity", opts.commodity ?? "tomato_sayur");
+      form.append("commodity", opts.commodity ?? KOMODITAS_DEFAULT);
       const res = await fetch(`${PREDICT_URL.replace(/\/$/, "")}/predict`, {
         method: "POST",
         body: form,
@@ -127,18 +159,18 @@ export async function gradeBatch(opts?: {
   }
 
   // Demo mode — same payload shape as ai_engine/model.py `dict_results`.
-  await delay(2200);
+  await delay(1800);
   return {
     status: "success",
-    komoditas: opts?.commodity ?? "tomato_sayur",
-    objek_terdeteksi: 42,
-    kalibrasi: { referensi: "koin_500", px_per_mm2: 0.52, valid: true },
+    komoditas: opts?.commodity ?? KOMODITAS_DEFAULT,
+    objek_terdeteksi: 0,
+    kalibrasi: { referensi: "koin_500", px_per_mm2: 0, valid: false },
     ringkasan_batch: {
-      komposisi: { A: 0.14, B: 0.6, C: 0.21, REJECT: 0.05 },
-      skor_keseragaman: 0.91,
+      komposisi: {},
+      skor_keseragaman: 0,
     },
     objek: [],
-    hash_audit: "sha256:9f31a0c4e7b28d15f6a3c9e0b7d4128fa6e5c3b90d2f7a41c7e2",
+    hash_audit: "sha256:demo-mode-no-camera",
   };
 }
 
@@ -168,6 +200,9 @@ const DEMO_ACUAN: Record<string, { label: string; harga: number }> = {
   tomato_beef: { label: "Tomat Beef", harga: 11500 },
   tomato_ceri: { label: "Tomat Ceri", harga: 26000 },
   chili_rawit: { label: "Cabai Rawit Merah", harga: 52000 },
+  // Kata dasar sebagai cadangan untuk varian yang belum punya harga sendiri.
+  tomato: { label: "Tomat", harga: 12000 },
+  chili: { label: "Cabai", harga: 45000 },
   carrot: { label: "Wortel", harga: 11000 },
   cucumber: { label: "Timun", harga: 9000 },
 };
@@ -177,17 +212,18 @@ export async function getRekomendasiHarga(opts?: {
   grade?: Grade;
   skor?: number;
 }): Promise<RekomendasiHarga> {
-  const komoditas = opts?.komoditas ?? "tomato_sayur";
+  const komoditas = opts?.komoditas ?? KOMODITAS_DEFAULT;
   const grade = opts?.grade ?? "B";
   const skor = opts?.skor ?? 0.62;
 
-  let label = DEMO_ACUAN[komoditas]?.label ?? "Tomat Sayur";
-  let acuan = DEMO_ACUAN[komoditas]?.harga ?? 12000;
+  // Komoditas spesifik dulu, lalu kata dasar ("carrot_lokal" -> "carrot").
+  const base = komoditas.split("_")[0];
+  const demo = DEMO_ACUAN[komoditas] ?? DEMO_ACUAN[base];
+  let label = demo?.label ?? labelKomoditas(komoditas);
+  let acuan = demo?.harga ?? 12000;
   let sumber = "PIHPS, demo";
 
   if (supabase) {
-    // Coba komoditas spesifik dulu, lalu komoditas dasar ("tomato_sayur" -> "tomato").
-    const base = komoditas.split("_")[0];
     const { data, error } = await supabase
       .from("harga_acuan")
       .select("*")
@@ -365,51 +401,3 @@ export const LISTINGS: Listing[] = [
   },
 ];
 
-/** Listings the logged-in petani owns, as shown on Dashboard Petani. */
-export const LISTING_SAYA: Listing[] = [
-  {
-    ...LISTINGS[0],
-    id: "PNT-L-0301",
-    nama: "Bawang Merah",
-    grade: "A",
-    berat_kg: 120,
-    harga_per_kg: 35000,
-    gambar: "/img/bawang-merah.jpg",
-  },
-  {
-    ...LISTINGS[0],
-    id: "PNT-L-0302",
-    nama: "Bayam Hijau",
-    grade: "A",
-    berat_kg: 45,
-    harga_per_kg: 12000,
-    gambar: "/img/bayam.jpg",
-  },
-  {
-    ...LISTINGS[0],
-    id: "PNT-L-0303",
-    nama: "Kubis Hijau",
-    grade: "B",
-    berat_kg: 300,
-    harga_per_kg: 6000,
-    gambar: "/img/kubis.jpg",
-  },
-  {
-    ...LISTINGS[0],
-    id: "PNT-L-0304",
-    nama: "Kentang Dieng",
-    grade: "B",
-    berat_kg: 300,
-    harga_per_kg: 14500,
-    gambar: "/img/kentang.jpg",
-  },
-  {
-    ...LISTINGS[0],
-    id: "PNT-L-0305",
-    nama: "Tomat Ceri",
-    grade: "C",
-    berat_kg: 32,
-    harga_per_kg: 4000,
-    gambar: "/img/tomat.jpg",
-  },
-];
