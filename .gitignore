@@ -12,3 +12,9 @@ ai_engine/*.pt
 __pycache__/
 */__pycache__/
 *.pyc
+
+# Environments
+.env
+.venv/
+venv/
+env/

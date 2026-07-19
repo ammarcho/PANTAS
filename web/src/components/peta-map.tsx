@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { MapContainer, Marker, TileLayer, Tooltip, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { formatAngka } from "@/lib/format";
 import type { Listing } from "@/lib/types";
 
-const CENTER: [number, number] = [-6.8118, 107.6175];
+const FALLBACK_CENTER: [number, number] = [-6.8118, 107.6175];
 
 /** Price pill markers, matching the Figma map. */
 function priceIcon(harga: number, active: boolean) {
@@ -37,16 +37,19 @@ const meIcon = L.divIcon({
 });
 
 /** Keep every listing in view without hardcoding a zoom. */
-function FitBounds({ listings }: { listings: Listing[] }) {
+function FitBounds({ listings, center }: { listings: Listing[], center: [number, number] }) {
   const map = useMap();
   useEffect(() => {
-    if (!listings.length) return;
+    if (!listings.length) {
+      map.setView(center, map.getZoom());
+      return;
+    }
     const bounds = L.latLngBounds([
-      CENTER,
+      center,
       ...listings.map((l) => [l.lat, l.lng] as [number, number]),
     ]);
     map.fitBounds(bounds, { padding: [40, 40], maxZoom: 13 });
-  }, [map, listings]);
+  }, [map, listings, center]);
   return null;
 }
 
@@ -59,9 +62,24 @@ export default function PetaMap({
   selectedId?: string;
   onSelect?: (id: string) => void;
 }) {
+  const [center, setCenter] = useState<[number, number]>(FALLBACK_CENTER);
+
+  useEffect(() => {
+    if (typeof navigator !== "undefined" && "geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setCenter([position.coords.latitude, position.coords.longitude]);
+        },
+        (err) => {
+          console.warn("Gagal mendapatkan lokasi:", err.message);
+        }
+      );
+    }
+  }, []);
+
   return (
     <MapContainer
-      center={CENTER}
+      center={center}
       zoom={12}
       scrollWheelZoom={false}
       className="size-full"
@@ -71,9 +89,9 @@ export default function PetaMap({
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
       />
-      <FitBounds listings={listings} />
+      <FitBounds listings={listings} center={center} />
 
-      <Marker position={CENTER} icon={meIcon}>
+      <Marker position={center} icon={meIcon}>
         <Tooltip direction="top">Lokasi Anda</Tooltip>
       </Marker>
 
