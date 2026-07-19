@@ -14,8 +14,10 @@ type Mode = "loading" | "camera" | "demo";
 /** Urutan kelompok pada pemilih, mengikuti bobot model yang tersedia. */
 const KELOMPOK = [...new Set(KOMODITAS.map((k) => k.kelompok))];
 
+type Capture = { dataUrl: string; scale: number };
+
 /** Downscale to keep data URLs inside the localStorage budget. */
-function frameToDataUrl(source: HTMLVideoElement | HTMLImageElement): string {
+function frameToDataUrl(source: HTMLVideoElement | HTMLImageElement): Capture {
   const w = "videoWidth" in source ? source.videoWidth : source.naturalWidth;
   const h = "videoHeight" in source ? source.videoHeight : source.naturalHeight;
   const scale = Math.min(1, 900 / Math.max(w, h));
@@ -23,7 +25,49 @@ function frameToDataUrl(source: HTMLVideoElement | HTMLImageElement): string {
   canvas.width = Math.round(w * scale);
   canvas.height = Math.round(h * scale);
   canvas.getContext("2d")!.drawImage(source, 0, 0, canvas.width, canvas.height);
-  return canvas.toDataURL("image/jpeg", 0.72);
+  return { dataUrl: canvas.toDataURL("image/jpeg", 0.72), scale };
+}
+
+/**
+ * Terjemahkan lingkaran panduan koin di layar menjadi kotak [x, y, w, h] pada
+ * foto yang benar-benar terkirim, supaya calibration.py mencari koin di situ
+ * dan bukan salah menaksir tomat bulat sebagai referensi 27 mm.
+ *
+ * Dua transformasi berlapis: `object-cover` memangkas video ke kotak preview
+ * (jadi yang terlihat petani hanyalah potongan tengah bingkai kamera), lalu
+ * frameToDataUrl menyusutkannya lagi ke maksimum 900 px.
+ */
+function coinRoi(
+  video: HTMLVideoElement,
+  stage: HTMLElement,
+  coin: HTMLElement,
+  scale: number,
+): [number, number, number, number] | null {
+  const vw = video.videoWidth;
+  const vh = video.videoHeight;
+  const box = stage.getBoundingClientRect();
+  const ring = coin.getBoundingClientRect();
+  if (!vw || !vh || !box.width || !box.height) return null;
+
+  // object-cover: video diperbesar dengan rasio terbesar lalu dipusatkan.
+  const cover = Math.max(box.width / vw, box.height / vh);
+  const visX = (vw - box.width / cover) / 2;
+  const visY = (vh - box.height / cover) / 2;
+
+  // Lingkaran -> koordinat bingkai kamera, dilebarkan 75% tiap sisi supaya
+  // koin cukup "kira-kira di sini" dan tidak perlu pas mengisi lingkaran.
+  const pad = 0.75;
+  const w = (ring.width / cover) * (1 + pad * 2);
+  const h = (ring.height / cover) * (1 + pad * 2);
+  const x = visX + (ring.left - box.left) / cover - (ring.width / cover) * pad;
+  const y = visY + (ring.top - box.top) / cover - (ring.height / cover) * pad;
+
+  const x0 = Math.max(0, Math.round(x * scale));
+  const y0 = Math.max(0, Math.round(y * scale));
+  const x1 = Math.min(Math.round(vw * scale), Math.round((x + w) * scale));
+  const y1 = Math.min(Math.round(vh * scale), Math.round((y + h) * scale));
+  if (x1 - x0 < 24 || y1 - y0 < 24) return null;
+  return [x0, y0, x1 - x0, y1 - y0];
 }
 
 export default function PindaiPage() {
@@ -37,6 +81,8 @@ export default function PindaiPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const stageRef = useRef<HTMLElement>(null);
+  const coinRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -70,16 +116,25 @@ export default function PindaiPage() {
     };
   }, []);
 
-  function finish(dataUrl: string | null) {
-    store.setLastCapture(dataUrl, komoditas);
+  function finish(
+    dataUrl: string | null,
+    roi: [number, number, number, number] | null = null,
+  ) {
+    store.setLastCapture(dataUrl, komoditas, roi);
     setScanning(true);
     setTimeout(() => router.push("/petani/hasil"), 1400);
   }
 
   function capture() {
     if (scanning) return;
-    if (mode === "camera" && videoRef.current) {
-      finish(frameToDataUrl(videoRef.current));
+    const video = videoRef.current;
+    if (mode === "camera" && video) {
+      const shot = frameToDataUrl(video);
+      const roi =
+        stageRef.current && coinRef.current
+          ? coinRoi(video, stageRef.current, coinRef.current, shot.scale)
+          : null;
+      finish(shot.dataUrl, roi);
     } else {
       finish(null); // demo mode: hasil falls back to the sample photo
     }
@@ -91,7 +146,8 @@ export default function PindaiPage() {
     const url = URL.createObjectURL(file);
     const img = new window.Image();
     img.onload = () => {
-      finish(frameToDataUrl(img));
+      // Foto galeri tidak punya lingkaran panduan; engine cari koin se-foto.
+      finish(frameToDataUrl(img).dataUrl);
       URL.revokeObjectURL(url);
     };
     img.src = url;
@@ -101,7 +157,7 @@ export default function PindaiPage() {
     <>
       <BrandBar />
 
-      <main className="relative flex-1 overflow-hidden bg-black">
+      <main ref={stageRef} className="relative flex-1 overflow-hidden bg-black">
         {/* Live camera when available, sample photo otherwise */}
         <video
           ref={videoRef}
@@ -167,13 +223,19 @@ export default function PindaiPage() {
           {scanning ? "Menghitung Estimasi Grade…" : "Arahkan ke tumpukan panen"}
         </div>
 
-        {/* Coin ROI — calibration.py looks for a Rp500 coin to derive px/mm² */}
-        <div className="absolute bottom-6 left-6 flex size-20 flex-col items-center justify-center rounded-full border-2 border-dashed border-white/70 bg-black/40 text-center text-[9px] leading-tight font-bold text-white backdrop-blur-sm">
-          KOIN
-          <br />
-          Rp500
-          <br />
-          DI SINI
+        {/* Coin ROI — calibration.py looks for a Rp500 coin to derive px/mm².
+            Diameter lingkaran ini kira-kira sebesar koin Rp500 (27 mm) pada
+            jarak ±30 cm. Lebih besar dari itu petani terpaksa mendekat sampai
+            fotonya blur dan ditolak gerbang kualitas di model.py. Koin tidak
+            perlu mengisi penuh — coinRoi() melebarkan kotak pencarian 4x. */}
+        <div className="absolute bottom-6 left-6 flex flex-col items-center gap-1.5">
+          <div
+            ref={coinRef}
+            className="size-14 rounded-full border-2 border-dashed border-white/70 bg-black/30 backdrop-blur-sm"
+          />
+          <span className="rounded bg-black/60 px-1.5 py-0.5 text-[9px] leading-tight font-bold whitespace-nowrap text-white backdrop-blur-sm">
+            KOIN Rp500
+          </span>
         </div>
       </main>
 

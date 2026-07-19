@@ -71,6 +71,13 @@ interface State {
   inquiry: Record<string, number>; // listingId -> qty (kg)
   orders: Order[];
   lastCapture: string | null; // data URL from the camera, feeds hasil/listing
+  /**
+   * Kotak [x, y, w, h] pada `lastCapture` tempat koin Rp500 diperkirakan
+   * berada, dihitung dari lingkaran panduan di layar pindai. Tanpa ini
+   * calibration.py menyapu seluruh foto dan bisa memakai tomat sebagai
+   * referensi 27 mm. null untuk foto galeri / mode demo.
+   */
+  lastCoinRoi: [number, number, number, number] | null;
   /** Komoditas yang dipilih petani di layar pindai, dipakai oleh /hasil. */
   lastKomoditas: string;
   lastPublishedId: string | null;
@@ -88,6 +95,7 @@ const INITIAL: State = {
   inquiry: {},
   orders: [],
   lastCapture: null,
+  lastCoinRoi: null,
   lastKomoditas: KOMODITAS_DEFAULT,
   lastPublishedId: null,
 };
@@ -176,7 +184,11 @@ interface Actions {
   ): Promise<{ sesi: Sesi | null; error: string | null }>;
   logout(): void;
 
-  setLastCapture(dataUrl: string | null, komoditas?: string): void;
+  setLastCapture(
+    dataUrl: string | null,
+    komoditas?: string,
+    coinRoi?: [number, number, number, number] | null,
+  ): void;
   addScan(
     s: Omit<Scan, "id" | "tanggal"> & {
       /** Payload lengkap dari gradeBatch — dipersistenkan ke tabel gradings. */
@@ -439,10 +451,15 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const setLastCapture = useCallback(
-    (dataUrl: string | null, komoditas?: string) => {
+    (
+      dataUrl: string | null,
+      komoditas?: string,
+      coinRoi: [number, number, number, number] | null = null,
+    ) => {
       setState((s) => ({
         ...s,
         lastCapture: dataUrl,
+        lastCoinRoi: coinRoi,
         lastKomoditas: komoditas ?? s.lastKomoditas,
       }));
     },

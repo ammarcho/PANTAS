@@ -110,11 +110,13 @@ export default function HasilPage() {
     let cancelled = false;
     // Kirim capture asli ke FastAPI /predict bila NEXT_PUBLIC_PREDICT_URL
     // terisi; tanpa itu gradeBatch mengembalikan payload demo.
-    gradeBatch({ imageDataUrl: store.lastCapture, commodity: komoditas }).then(
-      (r) => {
-        if (!cancelled) setHasil(r);
-      },
-    );
+    gradeBatch({
+      imageDataUrl: store.lastCapture,
+      commodity: komoditas,
+      coinRoi: store.lastCoinRoi,
+    }).then((r) => {
+      if (!cancelled) setHasil(r);
+    });
     return () => {
       cancelled = true;
     };
@@ -187,6 +189,14 @@ export default function HasilPage() {
           {num(hasil.kalibrasi.px_per_mm2, 2)} mm²/piksel • keyakinan rata-rata{" "}
           {num(hasil.ringkasan_batch.skor_keseragaman, 2)}
         </p>
+        {!hasil.kalibrasi.valid && (
+          // Tanpa kalibrasi, ukuran_mm2 tiap objek null dan grade jatuh ke
+          // penilaian bentuk/cacat saja — petani perlu tahu itu bisa diperbaiki.
+          <p className="pt-1 text-xs leading-4 text-grade-b">
+            Ukuran tidak terukur. Ulangi foto dengan koin Rp500 di dalam
+            lingkaran panduan, tegak lurus kamera dan tidak tertutup bayangan.
+          </p>
+        )}
 
         <div className="rise pt-4">
           <BatchPreview capture={store.lastCapture} annotated={hasil.annotated_img} />

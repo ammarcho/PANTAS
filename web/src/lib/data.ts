@@ -126,6 +126,12 @@ export async function gradeBatch(opts?: {
   imageDataUrl?: string | null;
   /** Komoditas spesifik yang dipahami engine, mis. "tomato_sayur". */
   commodity?: string;
+  /**
+   * Kotak [x, y, w, h] tempat koin Rp500 diperkirakan berada (store.lastCoinRoi).
+   * Tanpa ini calibration.py menyapu seluruh foto dan bisa memakai tomat bulat
+   * sebagai referensi 27 mm.
+   */
+  coinRoi?: [number, number, number, number] | null;
 }): Promise<GradingResult> {
   if (PREDICT_URL && opts?.imageDataUrl) {
     try {
@@ -133,6 +139,7 @@ export async function gradeBatch(opts?: {
       const form = new FormData();
       form.append("image", blob, "batch.jpg");
       form.append("commodity", opts.commodity ?? KOMODITAS_DEFAULT);
+      if (opts.coinRoi) form.append("roi", JSON.stringify(opts.coinRoi));
       const res = await fetch(`${PREDICT_URL.replace(/\/$/, "")}/predict`, {
         method: "POST",
         body: form,
