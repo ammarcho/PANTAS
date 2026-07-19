@@ -13,21 +13,21 @@ def test():
     
     # Ambil 1 gambar busuk dari dataset tomat untuk testing
     # Supaya kita bisa melihat VETO YOLO 2 beraksi
-    test_img_path = r"d:\Belajar_Pemrograman\WebDev\PANTAS\ai_engine\datasets\yolo2_classification\tomato\train\busuk"
-    if not os.path.exists(test_img_path):
-        print("Dataset tomat busuk tidak ditemukan untuk testing.")
-        sys.exit(1)
+    test_img_path = r"d:\Belajar_Pemrograman\WebDev\PANTAS\ai_engine\image_copy.png"
+    # if not os.path.exists(test_img_path):
+    #     print("Dataset tomat busuk tidak ditemukan untuk testing.")
+    #     sys.exit(1)
         
-    img_files = os.listdir(test_img_path)
-    if not img_files:
-        print("Folder kosong.")
-        sys.exit(1)
+    # img_files = os.listdir(test_img_path)
+    # if not img_files:
+    #     print("Folder kosong.")
+    #     sys.exit(1)
         
-    # Ambil gambar pertama
-    sample_img_file = os.path.join(test_img_path, img_files[0])
+    # # Ambil gambar pertama
+    # sample_img_file = os.path.join(test_img_path, img_files[0])
     
-    print(f"Membaca gambar: {sample_img_file}")
-    img_array = cv2.imread(sample_img_file)
+    print(f"Membaca gambar: { test_img_path}")
+    img_array = cv2.imread( test_img_path)
     if img_array is None:
         print("Gagal membaca gambar.")
         sys.exit(1)

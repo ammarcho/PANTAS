@@ -59,7 +59,7 @@ class PantasModel:
         # 0. Gerbang Kualitas Foto (Cek Blur)
         gray_img = cv2.cvtColor(img_array, cv2.COLOR_BGR2GRAY)
         blur_score = cv2.Laplacian(gray_img, cv2.CV_64F).var()
-        if blur_score < 50:
+        if blur_score < 15:
             return {
                 "status": "error", 
                 "message": f"Foto ditolak (terlalu blur). Skor ketajaman {int(blur_score)} di bawah standar."

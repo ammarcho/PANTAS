@@ -1,0 +1,25 @@
+{
+    "min_area_A": 15000,
+    "min_area_B": 8000,
+    "min_circularity_A": 0.7,
+    "min_circularity_B": 0.5,
+    "hue_ranges": {
+        "matang_merah": [
+            [0, 30],
+            [140, 180]
+        ],
+        "setengah_matang": [
+            [31, 50]
+        ],
+        "mentah_hijau": [
+            [51, 139]
+        ]
+    },
+    "defect_rules": {
+        "hsv_lower": [0, 0, 0],
+        "hsv_upper": [180, 255, 40],
+        "max_kosmetik_percent": 3.0,
+        "max_reject_percent": 15.0,
+        "min_solidity": 0.85
+    }
+}

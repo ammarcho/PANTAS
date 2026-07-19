@@ -76,9 +76,24 @@ class GradingEngine:
         mask_img = np.zeros((h, w), dtype=np.uint8)
         cv2.drawContours(mask_img, [mask_contour], -1, 255, -1)
         hsv_img = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+        # Ambil pixel Hue yang berada di dalam area tomat
+        hue_channel = hsv_img[:, :, 0]
+        valid_hues = hue_channel[mask_img == 255]
         
-        mean_hsv = cv2.mean(hsv_img, mask=mask_img)
-        mean_hue = mean_hsv[0]
+        if len(valid_hues) > 0:
+            # Konversi Hue OpenCV (0-179) ke Sudut Radian
+            angles = valid_hues.astype(np.float32) * 2.0 * np.pi / 180.0
+            # Cari rata-rata vektor (sin & cos) untuk menghindari bug 175 + 5 / 2 = 90 (Hijau)
+            mean_x = np.mean(np.cos(angles))
+            mean_y = np.mean(np.sin(angles))
+            mean_angle = np.arctan2(mean_y, mean_x)
+            if mean_angle < 0:
+                mean_angle += 2 * np.pi
+            # Kembalikan ke format OpenCV Hue (0-179)
+            mean_hue = (mean_angle * 180.0 / np.pi) / 2.0
+        else:
+            mean_hue = 0.0
+            
         result["hue_avg"] = mean_hue
 
         color_status, color_score = self._check_color(mean_hue)
