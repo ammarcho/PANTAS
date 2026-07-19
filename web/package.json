@@ -3,10 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "predev": "npm run gen:komoditas",
     "dev": "next dev",
+    "prebuild": "npm run gen:komoditas",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "gen:komoditas": "node scripts/gen-komoditas.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.7",

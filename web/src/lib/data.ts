@@ -108,21 +108,12 @@ const PREDICT_URL = process.env.NEXT_PUBLIC_PREDICT_URL;
  * ai_engine/grading_configs/. Nilai `id` inilah yang dikirim ke /predict
  * sebagai `commodity`; bobot modelnya dipilih dari kata dasar
  * ("tomato_ceri" -> export_models/tomato_seg.pt), jadi id baru hanya valid
- * bila config JSON-nya ada.
+ * bila config JSON-nya ada. Di-generate oleh scripts/gen-komoditas.mjs
+ * (jalan otomatis tiap `dev`/`build`) supaya tidak pernah out of sync
+ * sama isi folder config — edit label/kelompok di script itu, bukan di sini.
  */
-export const KOMODITAS: { id: string; label: string; kelompok: string }[] = [
-  { id: "tomato_sayur", label: "Tomat Sayur", kelompok: "Tomat" },
-  { id: "tomato_beef", label: "Tomat Beef", kelompok: "Tomat" },
-  { id: "tomato_ceri", label: "Tomat Ceri", kelompok: "Tomat" },
-  { id: "chili_rawit", label: "Cabai Rawit Merah", kelompok: "Cabai" },
-  { id: "chili_merah_keriting", label: "Cabai Merah Keriting", kelompok: "Cabai" },
-  { id: "chili_merah_besar", label: "Cabai Merah Besar", kelompok: "Cabai" },
-  { id: "chili_hijau_besar", label: "Cabai Hijau Besar", kelompok: "Cabai" },
-  { id: "carrot_lokal", label: "Wortel Lokal", kelompok: "Wortel" },
-  { id: "carrot_impor", label: "Wortel Impor", kelompok: "Wortel" },
-  { id: "cucumber_lokal", label: "Timun Lokal", kelompok: "Timun" },
-  { id: "cucumber_baby", label: "Timun Baby", kelompok: "Timun" },
-];
+export { KOMODITAS } from "./komoditas.generated";
+import { KOMODITAS } from "./komoditas.generated";
 
 export const KOMODITAS_DEFAULT = "tomato_sayur";
 

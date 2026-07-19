@@ -17,11 +17,11 @@ const PetaMap = dynamic(() => import("@/components/peta-map"), {
   ),
 });
 
-const CHIPS = ["Tomat", "Grade B", "≤ 25 km"];
+const CHIPS = ["Grade A", "Grade B", "≤ 25 km"];
 
 export default function PetaClient({ listings }: { listings: Listing[] }) {
-  const [query, setQuery] = useState("Tomat");
-  const [chips, setChips] = useState<string[]>(CHIPS);
+  const [query, setQuery] = useState("");
+  const [chips, setChips] = useState<string[]>([]);
   const [selected, setSelected] = useState<string>();
   const [userLoc, setUserLoc] = useState<{ lat: number; lng: number } | null>(null);
 
@@ -45,7 +45,8 @@ export default function PetaClient({ listings }: { listings: Listing[] }) {
       }));
     }
     const q = query.trim().toLowerCase();
-    if (q) out = out.filter((l) => l.nama.toLowerCase().includes(q));
+    if (q) out = out.filter((l) => l.nama.toLowerCase().includes(q) || l.komoditas.toLowerCase().includes(q));
+    if (chips.includes("Grade A")) out = out.filter((l) => l.grade === "A");
     if (chips.includes("Grade B")) out = out.filter((l) => l.grade === "B");
     if (chips.includes("≤ 25 km")) out = out.filter((l) => l.jarak_km <= 25);
     return out;
