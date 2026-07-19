@@ -13,9 +13,12 @@ import type { RekomendasiHarga } from "@/lib/types";
  */
 export default function HargaForm({
   rec,
+  komoditas,
   children,
 }: {
   rec: RekomendasiHarga;
+  /** Id komoditas engine (mis. "chili_merah_keriting"), bukan labelnya. */
+  komoditas: string;
   children: ReactNode; // the server-rendered breakdown card
 }) {
   const router = useRouter();
@@ -46,6 +49,7 @@ export default function HargaForm({
     setPublishing(true);
     store.publishListing({
       nama: rec.komoditas_label,
+      komoditas,
       grade: rec.grade_dominan,
       berat_kg: berat,
       harga_per_kg: harga,

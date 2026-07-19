@@ -38,8 +38,10 @@ export default function AkunView({
 
       <Card className="mt-4 divide-y divide-line px-4">
         <div className="flex items-center justify-between gap-3 py-3">
-          <span className="text-xs text-muted">Nomor HP</span>
-          <span className="text-xs font-bold text-ink">{sesi.phone}</span>
+          <span className="text-xs text-muted">Email</span>
+          <span className="text-xs font-bold break-all text-ink">
+            {sesi.email}
+          </span>
         </div>
         {baris.map(({ k, v }) => (
           <div key={k} className="flex items-center justify-between gap-3 py-3">

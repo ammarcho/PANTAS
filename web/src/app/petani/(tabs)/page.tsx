@@ -73,12 +73,16 @@ export default function DashboardPetani() {
                   {lastScan.komoditas_label}
                 </p>
               </div>
-              <div className="text-right">
-                <p className="text-2xl leading-7 font-extrabold text-brand">
-                  {persen(0.98)}
-                </p>
-                <SectionLabel className="text-[10px]">Quality Score</SectionLabel>
-              </div>
+              {lastScan.skor != null && (
+                <div className="text-right">
+                  <p className="text-2xl leading-7 font-extrabold text-brand">
+                    {persen(lastScan.skor)}
+                  </p>
+                  <SectionLabel className="text-[10px]">
+                    Quality Score
+                  </SectionLabel>
+                </div>
+              )}
             </div>
             <p className="pt-1 text-xs leading-4 text-muted">
               {lastScan.objek} objek terdeteksi • grade dominan{" "}

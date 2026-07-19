@@ -17,14 +17,6 @@ export const supabase: SupabaseClient<Database> | null =
 
 export const isSupabaseConfigured = supabase !== null;
 
-/** "0812-3456-7890" / "081234567890" -> "+6281234567890" (E.164). */
-export function toE164(phone: string): string {
-  const digits = phone.replace(/\D/g, "");
-  if (digits.startsWith("62")) return `+${digits}`;
-  if (digits.startsWith("0")) return `+62${digits.slice(1)}`;
-  return `+62${digits}`;
-}
-
 /**
  * Upload a camera capture (data URL) to the `panen` bucket under the user's
  * folder. Returns the public URL, or null when not configured / upload fails
