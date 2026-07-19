@@ -59,7 +59,7 @@ class PantasModel:
         # 0. Gerbang Kualitas Foto (Cek Blur)
         gray_img = cv2.cvtColor(img_array, cv2.COLOR_BGR2GRAY)
         blur_score = cv2.Laplacian(gray_img, cv2.CV_64F).var()
-        if blur_score < 15:
+        if blur_score < 10:
             return {
                 "status": "error", 
                 "message": f"Foto ditolak (terlalu blur). Skor ketajaman {int(blur_score)} di bawah standar."
@@ -103,17 +103,27 @@ class PantasModel:
                     x, y, w, h = cv2.boundingRect(contour)
                     
                     # --- INTERVENSI YOLO 2 (AHLI PATOLOGI) ---
+                    # Buat mask dari contour
+                    mask_img = np.zeros(img_array.shape[:2], dtype=np.uint8)
+                    cv2.drawContours(mask_img, [contour], -1, 255, -1)
+                    
+                    # Trik Cerdas: Ubah latar belakang menjadi PUTIH (Bukan Hitam)
+                    # Karena YOLO 2 dilatih dengan gambar Google (latar putih = sehat)
+                    tomato_only_img = np.full_like(img_array, (255, 255, 255))
+                    cv2.copyTo(src=img_array, mask=mask_img, dst=tomato_only_img)
+                    
                     # Tambahkan padding 10% agar buah tidak terpotong ketat
                     pad_x = int(w * 0.1)
                     pad_y = int(h * 0.1)
-                    img_h, img_w = img_array.shape[:2]
+                    img_h, img_w = tomato_only_img.shape[:2]
                     
                     crop_x1 = max(0, x - pad_x)
                     crop_y1 = max(0, y - pad_y)
                     crop_x2 = min(img_w, x + w + pad_x)
                     crop_y2 = min(img_h, y + h + pad_y)
                     
-                    crop_img = img_array[crop_y1:crop_y2, crop_x1:crop_x2]
+                    # Crop dari gambar yang sudah bersih dari latar belakang
+                    crop_img = tomato_only_img[crop_y1:crop_y2, crop_x1:crop_x2]
                     
                     # Prediksi kesehatan menggunakan YOLO 2
                     if crop_img.shape[0] > 0 and crop_img.shape[1] > 0:
@@ -122,8 +132,16 @@ class PantasModel:
                         top_class_name = yolo2_res.names[top_class_idx]
                         top_class_conf = float(yolo2_res.probs.top1conf)
                         
-                        # Terapkan Logika VETO
-                        if top_class_name == "busuk":
+                        # Terapkan Logika VETO (Saksi Konfirmasi, bukan Hakim Mutlak)
+                        VETO_CONF_MIN = 0.85
+                        has_bercak = any(
+                            c["jenis"] in ("bercak_busuk", "bercak_ringan")
+                            for c in grade_result["cacat"]
+                        )
+                        
+                        if (top_class_name == "busuk" 
+                                and top_class_conf >= VETO_CONF_MIN 
+                                and has_bercak):
                             if "REJECT" not in grade:
                                 grade = "REJECT"
                                 grade_result['grade'] = "REJECT"
