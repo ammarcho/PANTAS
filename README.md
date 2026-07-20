@@ -29,6 +29,21 @@ Model klasifikasi terbaru kami dilatih menggunakan dataset yang sudah melalui pr
 | **Wortel (Carrot)** | **100,0%** | Latar Putih Bersih | Sempurna ✅ |
 | **Cabai (Chili)** | *Tahap Pelatihan* | Latar Putih Bersih | (Sedang dalam proses *training*) ⏳ |
 
+## 📂 Rekapitulasi Dataset (Data Training)
+Sistem ini menggunakan dua himpunan data terpisah untuk melatih kedua otaknya:
+
+### 1. Dataset YOLO 1 (Segmentasi Poligon)
+Dataset ini murni ditujukan agar AI bisa mengenali dan menggunting bentuk sayuran. Semua kelas varietas turunan telah **dilebur menjadi 1 kelas tunggal** (contoh: *banana pepper* & *bird-s eye chili* dilebur menjadi kelas `0: chili`) agar AI fokus pada deteksi bentuk buah.
+- **Cabai (Chili):** 6.675 gambar poligon (Penggabungan dataset lama & baru)
+- **Tomat (Tomato):** ~9.790 gambar poligon
+- **Timun (Cucumber):** ~1.250 gambar poligon
+- **Wortel (Carrot):** ~788 gambar poligon
+
+### 2. Dataset YOLO 2 (Klasifikasi Sehat vs Busuk)
+Dataset ini dipotong (*crop*) secara ketat dan difilter agar hanya berisi area kulit komoditas untuk mendeteksi pembusukan/penyakit.
+- **Cabai (Chili):** 313 gambar (*crop* ketat: 150 sehat, 163 busuk)
+- **Komoditas Lainnya:** Menggunakan metode *Auto-Masking* latar putih bersih via `prepare_dataset.py`.
+
 ## 📁 Struktur Repositori Utama
 - `ai_engine/export_models/` : Direktori penyimpanan model hasil *training* (YOLO 1 `.pt` dan YOLO 2 `.pt`).
 - `ai_engine/grading_configs/` : Kumpulan aturan batas standar (JSON) penentuan mutu untuk masing-masing varietas.
