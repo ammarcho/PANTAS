@@ -19,8 +19,23 @@ Keputusan akhir (*Grade*) tidak diambil secara buta oleh AI. Kami menggunakan me
 - Jika `sehat` dan lonjong sempurna -> **Grade A**
 - Jika luasan bercak / pembusukan (dari YOLO) melebihi batas -> **REJECT**
 
-## 📊 Rapor Akurasi YOLO 2 (Klasifikasi Penyakit & Mutu)
-Model klasifikasi terbaru kami dilatih menggunakan dataset yang sudah melalui proses "cuci bersih" (latar putih), menghasilkan akurasi yang luar biasa tanpa mengalami *overfitting*.
+## 📊 Rapor Akurasi Model AI
+
+Karena sistem PANTAS menggunakan dua otak AI yang berbeda, evaluasinya pun terbagi menjadi dua:
+
+### 1. Rapor Akurasi YOLO 1 (Segmentasi Poligon)
+Model pemotong (*masking*) dievaluasi berdasarkan kemampuannya mengenali lekuk luar buah (*Precision*, *Recall*, dan *mAP50 Mask*).
+
+| Komoditas | Precision | Recall | mAP50 (Mask) | Status / Epoch |
+| :--- | :--- | :--- | :--- | :--- |
+| **Cabai (Chili)** | **~96,0%*** | **~94,4%*** | **~96,8%*** | (*Sedang dalam pelatihan ulang*) ⏳ |
+| **Timun (Cucumber)** | **95,9%** | **89,8%** | **96,0%** | Sangat Tajam (Epoch 100) ✅ |
+| **Tomat (Tomato)** | **94,5%** | **84,5%** | **90,3%** | Sangat Baik (Epoch 100) ✅ |
+| **Wortel (Carrot)** | **91,1%** | **78,1%** | **87,4%** | Sangat Bagus (Epoch 100) ✅ |
+*\*Catatan: Akurasi sementara cabai didapat dari pemantauan Epoch ke-19 pada model poligon baru.*
+
+### 2. Rapor Akurasi YOLO 2 (Klasifikasi Penyakit & Mutu)
+Model klasifikasi ini dilatih menggunakan dataset yang sudah melalui proses "cuci bersih" (latar putih), menghasilkan akurasi tinggi tanpa *overfitting*.
 
 | Komoditas | Akurasi Validasi | Kondisi | Status Model |
 | :--- | :--- | :--- | :--- |
