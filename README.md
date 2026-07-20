@@ -28,11 +28,10 @@ Model pemotong (*masking*) dievaluasi berdasarkan kemampuannya mengenali lekuk l
 
 | Komoditas | Precision | Recall | mAP50 (Mask) | Status / Epoch |
 | :--- | :--- | :--- | :--- | :--- |
-| **Cabai (Chili)** | **~96,0%*** | **~94,4%*** | **~96,8%*** | (*Sedang dalam pelatihan ulang*) ⏳ |
+| **Cabai (Chili)** | **97,8%** | **94,5%** | **97,4%** | Sangat Tajam (Epoch 40) ✅ |
 | **Timun (Cucumber)** | **95,9%** | **89,8%** | **96,0%** | Sangat Tajam (Epoch 100) ✅ |
 | **Tomat (Tomato)** | **94,5%** | **84,5%** | **90,3%** | Sangat Baik (Epoch 100) ✅ |
 | **Wortel (Carrot)** | **91,1%** | **78,1%** | **87,4%** | Sangat Bagus (Epoch 100) ✅ |
-*\*Catatan: Akurasi sementara cabai didapat dari pemantauan Epoch ke-19 pada model poligon baru.*
 
 ### 2. Rapor Akurasi YOLO 2 (Klasifikasi Penyakit & Mutu)
 Model klasifikasi ini dilatih menggunakan dataset yang sudah melalui proses "cuci bersih" (latar putih), menghasilkan akurasi tinggi tanpa *overfitting*.

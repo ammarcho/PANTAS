@@ -20,7 +20,7 @@ import shutil
 import random
 
 # === KONFIGURASI ===
-COMMODITIES = ["tomato", "carrot", "chili", "cucumber"]
+COMMODITIES = ["chili"]
 BASE_LAMA = Path(__file__).parent / "datasets" / "yolo2_classification"
 BASE_BARU = Path(__file__).parent / "datasets" / "yolo2_ready"
 MODELS_DIR = Path(__file__).parent / "export_models"
