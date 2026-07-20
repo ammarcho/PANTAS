@@ -98,6 +98,7 @@ class GradingEngine:
 
         color_status, color_score = self._check_color(mean_hue)
         result["color_status"] = color_status
+        result["color_score"] = color_score
 
         # 4. Deteksi CACAT (Hitam/Busuk) - Dinamis per Komoditas
         defect_config = self.config.get("defect_rules", {})
@@ -147,7 +148,19 @@ class GradingEngine:
             else:
                 grade_final = "C"
                 alasan.append(f"Ukuran {int(area_mm2)}mm2 < ambang Grade B ({min_b}mm2)")
-                
+            
+            # Downgrade circularity (bentuk bulatan)
+            min_circ_a = self.config.get("min_circularity_A", 0.7)
+            min_circ_b = self.config.get("min_circularity_B", 0.5)
+            if circularity < min_circ_b:
+                if grade_final in ["A", "B"]:
+                    grade_final = "C"
+                alasan.append(f"Bentuk terlalu lonjong/cacat (circularity {circularity:.2f} < {min_circ_b})")
+            elif circularity < min_circ_a:
+                if grade_final == "A":
+                    grade_final = "B"
+                alasan.append(f"Bentuk kurang bulat (circularity {circularity:.2f} < {min_circ_a})")
+
             # Downgrade warna
             if color_score < 3:
                 if grade_final in ["A", "B"]:

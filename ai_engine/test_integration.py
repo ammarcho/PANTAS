@@ -13,7 +13,7 @@ def test():
     
     # Ambil 1 gambar busuk dari dataset tomat untuk testing
     # Supaya kita bisa melihat VETO YOLO 2 beraksi
-    test_img_path = r"d:\Belajar_Pemrograman\WebDev\PANTAS\ai_engine\image copy.png"
+    test_img_path = r"d:\Belajar_Pemrograman\WebDev\PANTAS\ai_engine\image copy 4.png"
     # if not os.path.exists(test_img_path):
     #     print("Dataset tomat busuk tidak ditemukan untuk testing.")
     #     sys.exit(1)
@@ -36,7 +36,7 @@ def test():
     # Anggap koin berada di koordinat dummy
     roi_koin = (10, 10, 100, 100) 
     
-    dict_results, annotated_img = pantas.predict(img_array, "tomato_sayur", roi=roi_koin)
+    dict_results, annotated_img = pantas.predict(img_array, "tomato_merah", roi=roi_koin)
     
     print("\n--- HASIL INTEGRASI MULTI-MODEL ---")
     print(json.dumps(dict_results, indent=2))

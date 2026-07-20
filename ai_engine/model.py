@@ -156,6 +156,9 @@ class PantasModel:
                         "grade": grade,
                         "ukuran_mm2": round(grade_result['area_mm2'], 1) if is_calibrated else None,
                         "solidity": round(grade_result['solidity'], 2),
+                        "circularity": round(grade_result['circularity'], 2),
+                        "color_status": grade_result['color_status'],
+                        "color_score": grade_result.get('color_score', 0),
                         "cacat": grade_result['cacat'],
                         "alasan_grade": grade_result['alasan_grade'],
                         "yolo2_kondisi": top_class_name,
@@ -167,7 +170,7 @@ class PantasModel:
                     if "A" in grade: color = (0, 255, 0)
                     elif "B" in grade: color = (0, 255, 255)
                     elif "C" in grade: color = (0, 0, 255)
-                    else: color = (0, 0, 0) # REJECT
+                    else: color = (0, 0, 255) # REJECT = Merah terang
 
                     cv2.drawContours(annotated_img, [contour], -1, color, 2)
                     
@@ -191,6 +194,16 @@ class PantasModel:
             
         komposisi = {k: round(v/total_obj, 2) for k, v in grade_counts.items()} if total_obj > 0 else {}
 
+        # Hitung Skor Keseragaman dari std dev ukuran
+        if total_obj > 1:
+            sizes = [r['ukuran_mm2'] if r['ukuran_mm2'] else r['bbox'][2] * r['bbox'][3] for r in grading_results]
+            mean_size = np.mean(sizes)
+            std_size = np.std(sizes)
+            cv_coeff = std_size / mean_size if mean_size > 0 else 0
+            skor_keseragaman = round(max(0, 1 - cv_coeff), 2)
+        else:
+            skor_keseragaman = 1.0
+
         # Struktur Output Final (Sesuai Proposal)
         dict_results = {
             "status": "success",
@@ -203,7 +216,7 @@ class PantasModel:
             },
             "ringkasan_batch": {
                 "komposisi": komposisi,
-                "skor_keseragaman": 0.85 # Placeholder, bisa dihitung dari std dev ukuran
+                "skor_keseragaman": skor_keseragaman
             },
             "objek": grading_results
         }

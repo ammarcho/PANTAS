@@ -5,41 +5,21 @@
     "min_circularity_B": 0.5,
     "hue_ranges": {
         "matang_merah": [
-            [
-                0,
-                15
-            ],
-            [
-                165,
-                180
-            ]
+            [0, 15],
+            [165, 180]
         ],
         "setengah_matang": [
-            [
-                15,
-                35
-            ]
+            [15, 35]
         ],
         "mentah_hijau": [
-            [
-                35,
-                85
-            ]
+            [35, 85]
         ]
     },
     "defect_rules": {
-        "hsv_lower": [
-            0,
-            0,
-            0
-        ],
-        "hsv_upper": [
-            180,
-            255,
-            70
-        ],
-        "max_kosmetik_percent": 0.5,
-        "max_reject_percent": 5.0,
-        "min_solidity": 0.9
+        "hsv_lower": [0, 0, 0],
+        "hsv_upper": [180, 255, 40],
+        "max_kosmetik_percent": 3.0,
+        "max_reject_percent": 15.0,
+        "min_solidity": 0.85
     }
 }
