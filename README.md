@@ -1,52 +1,54 @@
-# PANTAS - Sistem Penyortir Sayur Cerdas (Single-Class YOLOv11) 🌶️🍅🥕🥒
+# PANTAS - Sistem Penyortir Sayur Cerdas (Dual-Stage YOLOv11 & Rule Engine) 🌶️🍅🥕🥒
 
-PANTAS adalah sistem cerdas berbasis *Computer Vision* (YOLOv11 Instance Segmentation) yang dirancang untuk kebutuhan industri penyortiran komoditas sayuran. Sistem ini mampu mengenali dan memotong (*segment*) objek secara akurat secara *real-time* menggunakan kamera.
+PANTAS adalah sistem cerdas berbasis *Computer Vision* yang dirancang khusus untuk kebutuhan industri penyortiran komoditas pertanian. Mampu mengklasifikasikan mutu (Grade A, B, C, REJECT) secara akurat berdasarkan bentuk, ukuran, dan tingkat kerusakan fisik secara *real-time*.
 
-## 🚀 Pendekatan "AI Spesialis" (Single-Class)
-Pada awalnya, sistem ini dirancang menggunakan 1 model gabungan raksasa untuk memproses 4 komoditas sekaligus. Namun, untuk mengatasi masalah **halusinasi kelas** (misal: tomat salah ditebak sebagai cabai) dan **bottleneck memori (CUDA OOM)** saat menangani 50.000+ dataset gambar, arsitektur sistem dirombak menjadi pendekatan **Single-Class Specialist**.
+## 🚀 Arsitektur Baru: Pendekatan Dual-Stage YOLO + Rule Engine
+Untuk mengatasi masalah bias latar belakang (seperti tekstur meja atau warna tangan) dan mencapai akurasi tingkat industri, arsitektur sistem ini menggunakan pendekatan **Dua Tahap (Dual-Stage)** dipadukan dengan **Mesin Sortasi (Grading Engine)**.
 
-Kami melatih 4 buah "Otak AI Spesialis" yang berbeda. Setiap model secara eksklusif hanya mempelajari 1 jenis komoditas, sehingga akurasi segmentasinya melesat drastis dan bebas dari kesalahan silang antar komoditas.
+### 1. YOLO 1 (Instance Segmentation) - Sang Pemotong
+Tugas model ini hanyalah mengenali bentuk asli komoditas dan "mengguntingnya" (*masking*) dari lingkungan sekitarnya. Seluruh latar belakang diubah menjadi putih bersih (*auto-masking*).
+- Menghilangkan *noise* (bayangan, tangan, meja).
+- Memungkinkan perhitungan geometri yang presisi (panjang, rasio, tingkat kebulatan/circularity, dan keparahan cacat).
 
-## 📊 Rapor Akurasi Model (Evaluasi Akhir)
-Seluruh model dilatih menggunakan YOLOv11-seg dengan pendekatan `imgsz=416` dan `batch=8` untuk mengoptimalkan kecepatan *training* tanpa mengorbankan kualitas.
+### 2. YOLO 2 (Classification) - Sang Pendeteksi Penyakit
+Tugas model ini adalah menganalisa gambar yang sudah dipotong dan dibersihkan oleh YOLO 1 untuk mendeteksi penyakit/pembusukan pada kulit luar komoditas. Model ini sangat fokus pada tekstur permukaan buah/sayur.
 
-| Komoditas | Dataset (Gambar) | Precision | Recall | mAP50 (Mask) | Status / Epoch |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **Cabai (Chili)** | ~6.400 | **97,6%** | **95,9%** | **97,1%** | Sempurna (Epoch 37 - Early Stop) |
-| **Timun (Cucumber)** | ~1.250 | **95,9%** | **89,8%** | **96,0%** | Sangat Tajam (Epoch 100) |
-| **Tomat (Tomato)** | ~9.790 | **94,5%** | **84,5%** | **90,3%** | Sangat Baik (Epoch 100) |
-| **Wortel (Carrot)** | ~788 | **91,1%** | **78,1%** | **87,4%** | Sangat Bagus (Epoch 100) |
+### 3. Grading Engine (JSON Rule-Based) - Sang Pengambil Keputusan
+Keputusan akhir (*Grade*) tidak diambil secara buta oleh AI. Kami menggunakan mesin aturan (berbasis file konfigurasi JSON) untuk menggabungkan hasil prediksi AI dengan pengukuran geometri secara dinamis, contohnya:
+- Jika `sehat` namun ukuran terlalu kecil -> **Grade B**
+- Jika `sehat` dan lonjong sempurna -> **Grade A**
+- Jika luasan bercak / pembusukan (dari YOLO) melebihi batas -> **REJECT**
 
-*Catatan: Kecepatan inferensi (deteksi) hanya memakan waktu rata-rata **60ms - 80ms** per frame, sangat siap untuk kecepatan ban berjalan (conveyor belt) industri.*
+## 📊 Rapor Akurasi YOLO 2 (Klasifikasi Penyakit & Mutu)
+Model klasifikasi terbaru kami dilatih menggunakan dataset yang sudah melalui proses "cuci bersih" (latar putih), menghasilkan akurasi yang luar biasa tanpa mengalami *overfitting*.
 
-## 📁 Struktur Repositori
-- `export_models/` : Berisi 4 file bobot model AI (`*_best.pt`) yang sudah matang dan siap pakai.
-- `webcam.py` : Script antarmuka (CLI) untuk menjalankan kamera *real-time* atau tes gambar. Anda cukup memilih angka 1-4 untuk memuat AI Spesialis yang dibutuhkan.
-- `train_all.py` : Script *watchdog* untuk melakukan *queue training* otomatis secara berurutan.
-- `train_model.py` : Modul utama untuk melatih model YOLOv11 secara individual.
+| Komoditas | Akurasi Validasi | Kondisi | Status Model |
+| :--- | :--- | :--- | :--- |
+| **Tomat (Tomato)** | **96,5%** | Latar Putih Bersih | Sangat Stabil ✅ |
+| **Timun (Cucumber)** | **96,4%** | Latar Putih Bersih | Sangat Stabil ✅ |
+| **Wortel (Carrot)** | **100,0%** | Latar Putih Bersih | Sempurna ✅ |
+| **Cabai (Chili)** | *Tahap Pelatihan* | Latar Putih Bersih | (Sedang dalam proses *training*) ⏳ |
 
-## 💻 Cara Menggunakan (Inference)
-Pastikan Anda memiliki *webcam* atau gambar (*image*) yang ingin diuji, lalu jalankan:
+## 📁 Struktur Repositori Utama
+- `ai_engine/export_models/` : Direktori penyimpanan model hasil *training* (YOLO 1 `.pt` dan YOLO 2 `.pt`).
+- `ai_engine/grading_configs/` : Kumpulan aturan batas standar (JSON) penentuan mutu untuk masing-masing varietas.
+- `ai_engine/model.py` : Mesin utama *Inference* yang memadukan YOLO 1, Masking, ekstraksi geometri, dan YOLO 2.
+- `ai_engine/grading_engine.py` : Logika kalkulasi geometri (*solidity*, *circularity*) dan eksekusi aturan JSON.
+- `ai_engine/test_integration.py` : *Script* untuk menyimulasikan dan melihat hasil grading akhir pada suatu gambar.
+- `ai_engine/prepare_dataset.py` : Alat pencuci otomatis (*auto-masking*) yang menyulap dataset mentah menjadi dataset berlatar putih untuk dilatih ke YOLO 2.
+
+## 💻 Cara Menguji Coba (Inference)
+Jalankan *script* simulasi integrasi kami untuk melihat langsung kehebatan mesin pemisah mutu:
 
 ```bash
-python webcam.py
+cd ai_engine
+python test_integration.py
 ```
-Menu akan muncul di terminal. Pilih komoditas yang ingin disortir:
-```text
-========================================
-SISTEM PENYORTIR PANTAS (SINGLE-CLASS)
-========================================
-Pilih komoditas yang akan disortir:
-1. Cabai (Chili)
-2. Tomat (Tomato)
-3. Wortel (Carrot)
-4. Timun (Cucumber)
-Masukkan angka pilihan Anda (1-4): 2
-```
-Sistem akan otomatis memuat file `tomato_best.pt` dan mulai menyeleksi objek!
+*Script* ini akan memuat model terbaru dari `export_models`, membaca aturan JSON di `grading_configs`, memproses gambar uji, dan mengeluarkan detail evaluasinya secara *real-time*.
 
 ## 🛠️ Persyaratan Sistem
 - Python >= 3.10
-- Ultralytics (YOLO)
-- OpenCV
+- Ultralytics (YOLOv11)
+- OpenCV (`cv2`)
+- NumPy
 - PyTorch (direkomendasikan versi CUDA untuk deteksi *real-time*)
